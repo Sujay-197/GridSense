@@ -3,10 +3,16 @@ package com.gridsense.ar
 import android.app.Activity
 import android.content.Context
 import android.opengl.GLSurfaceView
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -70,7 +76,10 @@ fun rememberArTracker(active: Boolean): ArTracker? {
     return tracker
 }
 
-/** The live camera feed. ARCore only updates while this view is rendering. */
+/**
+ * The live camera feed with a crosshair at its centre, which is what [ArTracker.hitAtCentre]
+ * measures. ARCore only updates while this view is rendering.
+ */
 @Composable
 fun ArPreview(tracker: ArTracker, modifier: Modifier = Modifier) {
     val owner = LocalLifecycleOwner.current
@@ -86,8 +95,24 @@ fun ArPreview(tracker: ArTracker, modifier: Modifier = Modifier) {
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
+    Box(modifier = modifier) {
+        CameraView(tracker, holder)
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val arm = 26f
+            for (color in listOf(Color.Black, Color.White)) {
+                val width = if (color == Color.Black) 5f else 2.5f
+                drawLine(color, center - Offset(arm, 0f), center + Offset(arm, 0f), width)
+                drawLine(color, center - Offset(0f, arm), center + Offset(0f, arm), width)
+                drawCircle(color, radius = 8f, center = center, style = Stroke(width))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraView(tracker: ArTracker, holder: Array<GLSurfaceView?>) {
     AndroidView(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         factory = { context ->
             GLSurfaceView(context).apply {
                 preserveEGLContextOnPause = true

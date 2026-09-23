@@ -53,42 +53,41 @@ class CoreTest {
     }
 
     @Test
-    fun lookingDownMinusZWalkingForwardIsPlusY() {
-        // ARCore's default camera looks along -z.
-        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
-        near(Pt(0.0, 2.0), frame.toRoom(0.0, -2.0))
+    fun theFirstCornerIsTheOriginAndTheSecondLiesOnPlusY() {
+        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -4.0)!!
+        near(Pt(0.0, 0.0), frame.toRoom(0.0, 0.0))
+        near(Pt(0.0, 4.0), frame.toRoom(0.0, -4.0))
     }
 
     @Test
     fun theRoomsPlusXIsToTheRightOfTheWall() {
-        // Facing -z in a y-up right-handed world, your right is +x.
-        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        // A wall running along -z has +x on its right in a y-up right-handed world.
+        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -4.0)!!
         near(Pt(1.5, 0.0), frame.toRoom(1.5, 0.0))
     }
 
     @Test
-    fun theFrameFollowsTheDirectionTheOriginWasSetIn() {
-        // Facing +x, your right is +z, and the origin can be anywhere in ARCore's world.
-        val frame = RoomFrame.at(10.0, 5.0, 1.0, 0.0)!!
+    fun theFrameFollowsTheWallWhereverItIsInArCoresWorld() {
+        // A wall running along +x from (10, 5) has +z on its right.
+        val frame = RoomFrame.alongWall(10.0, 5.0, 13.0, 5.0)!!
         near(Pt(0.0, 3.0), frame.toRoom(13.0, 5.0))
         near(Pt(2.0, 0.0), frame.toRoom(10.0, 7.0))
     }
 
     @Test
-    fun theLookDirectionIsNormalised() {
-        // A camera tilted down still gives a unit heading from its horizontal part.
-        val frame = RoomFrame.at(0.0, 0.0, 0.0, -0.6)!!
-        near(Pt(0.0, 1.0), frame.toRoom(0.0, -1.0))
+    fun aDiagonalWallKeepsItsTrueLength() {
+        val frame = RoomFrame.alongWall(1.0, 1.0, 4.0, 5.0)!!
+        near(Pt(0.0, 5.0), frame.toRoom(4.0, 5.0))
     }
 
     @Test
-    fun aCameraPointedAtTheFloorGivesNoFrame() {
-        assertEquals(null, RoomFrame.at(0.0, 0.0, 0.1, -0.2))
+    fun cornersTooCloseTogetherGiveNoFrame() {
+        assertEquals(null, RoomFrame.alongWall(0.0, 0.0, 0.1, 0.1))
     }
 
     @Test
     fun reanchoringMapsTheCurrentPositionOntoTheTappedOne() {
-        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -1.0)!!
         // ARCore thinks you are at room (1, 4); you tap (1.3, 3.8) because it drifted.
         val anchored = frame.anchoredAt(1.0, -4.0, Pt(1.3, 3.8))
         near(Pt(1.3, 3.8), anchored.toRoom(1.0, -4.0))
@@ -98,7 +97,7 @@ class CoreTest {
 
     @Test
     fun reanchoringTwiceDoesNotStackOffsets() {
-        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -1.0)!!
             .anchoredAt(0.0, -1.0, Pt(5.0, 5.0))
             .anchoredAt(0.0, -1.0, Pt(0.0, 1.0))
         near(Pt(0.0, 1.0), frame.toRoom(0.0, -1.0))
@@ -106,7 +105,7 @@ class CoreTest {
 
     @Test
     fun headingIsMeasuredClockwiseFromPlusY() {
-        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -1.0)!!
         assertEquals(0.0, frame.headingOf(0.0, -1.0), 1e-9)
         assertEquals(Math.PI / 2, frame.headingOf(1.0, 0.0), 1e-9)
     }

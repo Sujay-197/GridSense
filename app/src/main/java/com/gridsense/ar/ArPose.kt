@@ -19,3 +19,16 @@ data class ArPose(
         val NONE = ArPose(false, 0.0, 0.0, 0.0, 0.0, -1, "AR is not running")
     }
 }
+
+/**
+ * Where the camera's line of sight through the crosshair meets a real surface, flattened to the
+ * floor plane. Aiming anywhere up the vertical edge of a corner gives that corner's floor
+ * position, which is what lets you mark corners you cannot walk to.
+ */
+data class ArHit(
+    val worldX: Double,
+    val worldZ: Double,
+    val distanceM: Double,
+    val surface: String,
+    val sessionId: Int
+)

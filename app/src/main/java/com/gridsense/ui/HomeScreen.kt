@@ -54,7 +54,7 @@ fun HomeScreen(vm: SurveyViewModel) {
             ) {
                 Text("No rooms yet", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Create a survey, walk its outline with AR or enter the room size, then mark the points you want to log.",
+                    "Create a survey, measure its outline with AR or enter the room size, then mark the points you want to log.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }

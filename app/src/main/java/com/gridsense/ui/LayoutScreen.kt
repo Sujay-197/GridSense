@@ -44,6 +44,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.gridsense.ar.ArHit
 import com.gridsense.ar.ArPose
 import com.gridsense.ar.ArPreview
 import com.gridsense.ar.ArStatus
@@ -77,7 +78,7 @@ fun LayoutScreen(vm: SurveyViewModel) {
                     Text(
                         when (vm.layoutPhase) {
                             LayoutPhase.SETTINGS -> "New survey"
-                            LayoutPhase.OUTLINE -> "Walk the walls"
+                            LayoutPhase.OUTLINE -> "Measure the outline"
                             LayoutPhase.POINTS -> "Mark the points"
                         }
                     )
@@ -195,8 +196,9 @@ private fun SettingsPhase(vm: SurveyViewModel, arUsable: Boolean) {
             ) {
                 Text("Or enter the room size", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "For a rectangular room. Corner (0, 0) is the one with the length wall on " +
-                        "your left as you face along it.",
+                    "For a rectangular room. The length is one wall: facing it, its left end is " +
+                        "corner 1 at (0, 0) and its right end is corner 2. The width runs from " +
+                        "that wall back across the room.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -277,9 +279,9 @@ private fun ArOutlineCard(vm: SurveyViewModel, arUsable: Boolean, basicsValid: B
                 }
 
                 else -> Text(
-                    "Stand in a corner with a wall on your left and point the camera along " +
-                        "it. That corner becomes (0, 0). Walk the walls marking each corner, " +
-                        "then return and close the outline.",
+                    "You do not need to reach the corners. Aim the crosshair at each one from " +
+                        "wherever you can see it, anywhere up the edge where the two walls meet, " +
+                        "and ARCore measures where it is.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -287,7 +289,7 @@ private fun ArOutlineCard(vm: SurveyViewModel, arUsable: Boolean, basicsValid: B
                 onClick = { vm.beginArOutline() },
                 enabled = arUsable && basicsValid,
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Walk the outline with AR") }
+            ) { Text("Measure the outline with AR") }
         }
     }
 }
@@ -296,42 +298,60 @@ private fun ArOutlineCard(vm: SurveyViewModel, arUsable: Boolean, basicsValid: B
 
 @Composable
 private fun OutlinePhase(vm: SurveyViewModel, tracker: ArTracker?, pose: ArPose) {
+    val stale = vm.arFrameIsStale(pose)
+    val instruction = when {
+        stale -> "ARCore restarted. Press Align, aim at corner 1, press Align, then aim at " +
+            "corner 2 and press Align again."
+        vm.alignFirst != null -> "Now aim at corner 2 and press Align."
+        vm.draftCorners.isEmpty() -> "Face any wall. Aim the crosshair at its left-hand corner, " +
+            "anywhere up the edge where the walls meet, and press Mark corner."
+        vm.draftCorners.size == 1 -> "Now aim at the right-hand corner of the same wall."
+        else -> "Carry on round the room to your right, one corner at a time. To finish, aim " +
+            "at corner 1 again and press Close."
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        CameraStrip(vm, tracker, pose, height = 200)
+        CameraStrip(vm, tracker, pose, height = 260)
+        Text(
+            instruction,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+        )
         PlanCanvas(vm, pose, modifier = Modifier.weight(1f))
         Readout(vm, pose)
 
-        val originNeeded = vm.arFrame == null || vm.arFrameIsStale(pose)
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (originNeeded) {
+            if (stale || vm.alignFirst != null) {
                 Button(
-                    onClick = { vm.setOrigin(pose) },
+                    onClick = { tracker?.hitAtCentre { hit, problem -> onAim(vm, hit, problem) { vm.alignAt(it) } } },
                     enabled = pose.tracking,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (vm.arFrame == null) "Set origin here" else "Back at (0, 0), set origin again")
-                }
+                ) { Text(if (vm.alignFirst == null) "Align: corner 1" else "Align: corner 2") }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { vm.markCorner(pose) },
-                        enabled = vm.positionOf(pose) != null,
+                        onClick = {
+                            tracker?.hitAtCentre { hit, problem ->
+                                onAim(vm, hit, problem) { vm.markCornerAt(it) }
+                            }
+                        },
+                        enabled = pose.tracking,
                         modifier = Modifier.weight(1f)
                     ) { Text("Mark corner") }
                     OutlinedButton(
                         onClick = { vm.undoCorner() },
-                        enabled = vm.draftCorners.size > 1,
+                        enabled = vm.draftCorners.isNotEmpty(),
                         modifier = Modifier.weight(1f)
                     ) { Text("Undo") }
                 }
                 Button(
-                    onClick = { vm.closeOutline(pose) },
+                    onClick = { tracker?.hitAtCentre { hit, _ -> vm.closeOutlineAt(hit) } },
                     enabled = vm.draftCorners.size >= 3,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Back at the start, close the outline") }
+                ) { Text("Aiming at corner 1 again, close") }
             }
             TextButton(
                 onClick = { vm.backToSettings() },
@@ -339,6 +359,11 @@ private fun OutlinePhase(vm: SurveyViewModel, tracker: ArTracker?, pose: ArPose)
             ) { Text("AR not working? Enter the room size instead") }
         }
     }
+}
+
+/** Hands a crosshair measurement to [use], or shows why there was none. */
+private fun onAim(vm: SurveyViewModel, hit: ArHit?, problem: String?, use: (ArHit) -> Unit) {
+    if (hit == null) vm.note = problem else use(hit)
 }
 
 // --- points ------------------------------------------------------------------
@@ -386,10 +411,14 @@ private fun PointsPhase(vm: SurveyViewModel, tracker: ArTracker?, pose: ArPose) 
                     modifier = Modifier.weight(1f)
                 )
                 ToolButton(
-                    label = if (vm.arFrame == null) "Set origin" else "Reset origin",
-                    selected = false,
+                    label = if (vm.alignFirst == null) "Align" else "Corner 2",
+                    selected = vm.alignFirst != null,
                     enabled = tracker != null && pose.tracking,
-                    onClick = { vm.setOrigin(pose) },
+                    onClick = {
+                        tracker?.hitAtCentre { hit, problem ->
+                            onAim(vm, hit, problem) { vm.alignAt(it) }
+                        }
+                    },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -434,10 +463,9 @@ private fun CameraStrip(vm: SurveyViewModel, tracker: ArTracker?, pose: ArPose, 
     val status = when {
         tracker.startupProblem != null -> tracker.startupProblem!!
         vm.arFrameIsStale(pose) ->
-            "AR restarted and lost the origin. Stand on corner (0, 0), point along the wall " +
-                "on your left, and set the origin again."
-        pose.tracking && vm.arFrame == null -> "Tracking. Set the origin to start."
-        pose.tracking -> "Tracking"
+            "AR restarted and lost its frame. Use Align on corners 1 and 2 to get it back."
+        pose.tracking && tracker.depthEnabled -> "Tracking, with depth"
+        pose.tracking -> "Tracking. No depth sensing on this phone, so aim at textured spots."
         else -> pose.problem ?: "Starting up"
     }
     Text(
@@ -593,13 +621,15 @@ private fun ClosureDialog(vm: SurveyViewModel) {
         text = {
             Text(
                 if (error == null) {
-                    "AR was not tracking when you closed the outline, so the drift over the " +
-                        "walk could not be measured. The corners are kept as marked."
+                    "The crosshair did not land on anything when you aimed back at corner 1, " +
+                        "so the closure error could not be measured. The corners are kept as " +
+                        "marked."
                 } else {
                     String.format(
-                        "You should be back on the origin corner, and ARCore puts you %.2f m " +
-                            "from it. That is the drift over the whole walk. The corners are " +
-                            "kept exactly as marked, and the figure is stored with the survey.",
+                        "Aiming at corner 1 again landed %.2f m from where it was first " +
+                            "marked. That is the drift and measurement error over the whole " +
+                            "outline. The corners are kept exactly as marked, and the figure " +
+                            "is stored with the survey.",
                         error
                     )
                 }

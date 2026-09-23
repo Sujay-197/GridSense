@@ -7,6 +7,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.google.ar.core.Config
+import com.google.ar.core.DepthPoint
+import com.google.ar.core.Frame
+import com.google.ar.core.Plane
+import com.google.ar.core.Point
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.TrackingState
@@ -32,12 +36,27 @@ class ArTracker(private val activity: Activity) : GLSurfaceView.Renderer {
     private var surfaceHeight = 0
     private var geometryPending = false
 
+    /** A crosshair measurement waiting for the next frame, with who to tell about it. */
+    private var pendingHit: ((ArHit?, String?) -> Unit)? = null
+
     var pose by mutableStateOf(ArPose.NONE)
         private set
 
     /** Why AR could not start at all, if it could not. The manual tools still work. */
     var startupProblem by mutableStateOf<String?>(null)
         private set
+
+    /** Whether the depth API is on. Without it, aiming only works on mapped planes and features. */
+    var depthEnabled by mutableStateOf(false)
+        private set
+
+    /**
+     * Measures where the crosshair at the centre of the preview meets a surface on the next
+     * frame. [onResult] runs on the main thread with either a hit or the reason there was none.
+     */
+    fun hitAtCentre(onResult: (ArHit?, String?) -> Unit) {
+        synchronized(lock) { pendingHit = onResult }
+    }
 
     fun resume() {
         synchronized(lock) { resumeLocked() }
@@ -52,14 +71,18 @@ class ArTracker(private val activity: Activity) : GLSurfaceView.Renderer {
                     (unavailable.message ?: unavailable.javaClass.simpleName)
                 return
             }
+            val depth = created.isDepthModeSupported(Config.DepthMode.AUTOMATIC)
             created.configure(
                 Config(created).apply {
                     focusMode = Config.FocusMode.AUTO
                     updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
-                    planeFindingMode = Config.PlaneFindingMode.DISABLED
+                    // Walls are what we aim at, so vertical planes matter as much as the floor.
+                    planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
                     lightEstimationMode = Config.LightEstimationMode.DISABLED
+                    depthMode = if (depth) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
                 }
             )
+            depthEnabled = depth
             session = created
             sessionId = nextSessionId++
             geometryPending = true
@@ -137,7 +160,44 @@ class ArTracker(private val activity: Activity) : GLSurfaceView.Renderer {
                     problem = describe(camera.trackingFailureReason)
                 )
             }
+
+            val request = pendingHit ?: return
+            pendingHit = null
+            val tracking = camera.trackingState == TrackingState.TRACKING
+            val hit = if (tracking) hitCentre(frame) else null
+            val problem = when {
+                hit != null -> null
+                !tracking -> "ARCore is not tracking. " + describe(camera.trackingFailureReason)
+                else -> "Nothing to measure against at the crosshair. Aim at a spot with some " +
+                    "texture, or sweep the camera slowly over the wall first so ARCore can map it."
+            }
+            activity.runOnUiThread { request(hit, problem) }
         }
+    }
+
+    /** The nearest usable surface along the ray through the centre of the preview. */
+    private fun hitCentre(frame: Frame): ArHit? {
+        val chosen = frame.hitTest(surfaceWidth / 2f, surfaceHeight / 2f).firstOrNull { result ->
+            when (val trackable = result.trackable) {
+                is Plane -> trackable.isPoseInPolygon(result.hitPose)
+                is DepthPoint -> true
+                is Point -> true
+                else -> false
+            }
+        } ?: return null
+        val surface = when (chosen.trackable) {
+            is DepthPoint -> "depth"
+            is Plane -> "a mapped surface"
+            else -> "a feature point"
+        }
+        val pose = chosen.hitPose
+        return ArHit(
+            worldX = pose.tx().toDouble(),
+            worldZ = pose.tz().toDouble(),
+            distanceM = chosen.distance.toDouble(),
+            surface = surface,
+            sessionId = sessionId
+        )
     }
 
     @Suppress("DEPRECATION")

@@ -2,14 +2,14 @@ package com.gridsense.core
 
 import kotlin.math.hypot
 
-/** The camera has to be within about sixty degrees of level for its heading to mean anything. */
-private const val MIN_HORIZONTAL = 0.5
+/** Two aimed corners closer than this cannot define a wall direction reliably. */
+private const val MIN_WALL_LENGTH_M = 0.3
 
 /**
  * Maps ARCore's horizontal world plane onto the room's own 2-D frame. ARCore's world is
- * gravity aligned with y up, so the floor plane is (x, z). The frame is fixed by standing on
- * the origin corner with a wall on your left and pointing the camera along that wall: that
- * direction becomes the room's +y axis and +x points to your right, into the room.
+ * gravity aligned with y up, so the floor plane is (x, z). The frame is fixed by two corners of
+ * one wall: facing that wall, corner 1 is its left end and becomes the origin, the wall runs
+ * along +y to corner 2, and +x points to the right of that direction, back into the room.
  *
  * [offsetX] and [offsetY] shift the result, which is how re-anchoring corrects accumulated
  * drift without redoing the whole frame.
@@ -49,13 +49,13 @@ data class RoomFrame(
 
     companion object {
         /**
-         * A frame whose origin is the camera's current position, with +y along the camera's
-         * horizontal look direction. Returns null when the camera points too steeply up or down.
+         * The frame defined by two corners of one wall, given as world floor positions.
+         * Returns null when they are too close together to give a direction.
          */
-        fun at(worldX: Double, worldZ: Double, lookX: Double, lookZ: Double): RoomFrame? {
-            val horizontal = hypot(lookX, lookZ)
-            if (horizontal < MIN_HORIZONTAL) return null
-            return RoomFrame(worldX, worldZ, lookX / horizontal, lookZ / horizontal)
+        fun alongWall(x1: Double, z1: Double, x2: Double, z2: Double): RoomFrame? {
+            val length = hypot(x2 - x1, z2 - z1)
+            if (length < MIN_WALL_LENGTH_M) return null
+            return RoomFrame(x1, z1, (x2 - x1) / length, (z2 - z1) / length)
         }
     }
 }

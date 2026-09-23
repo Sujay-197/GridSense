@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.gridsense.ar.ArHit
 import com.gridsense.ar.ArPose
 import com.gridsense.ar.ArStatus
 import com.gridsense.ar.checkArStatus
@@ -124,6 +125,13 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The ARCore session the frame belongs to. A new session means a new, unrelated world. */
     private var arFrameSession = -1
+
+    /** Corner 1 in ARCore's world, held until corner 2 fixes the direction of the frame. */
+    private var firstCornerHit: ArHit? = null
+
+    /** Corner 1 aimed at while aligning, waiting for corner 2. */
+    var alignFirst by mutableStateOf<ArHit?>(null)
+        private set
 
     var tool by mutableStateOf(PlanTool.NONE)
 
@@ -251,6 +259,8 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         closureErrorM = null
         arFrame = null
         arFrameSession = -1
+        firstCornerHit = null
+        alignFirst = null
         tool = PlanTool.NONE
         layoutPhase = LayoutPhase.SETTINGS
         note = null
@@ -265,6 +275,10 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     fun backToSettings() {
         draftCorners = emptyList()
         closureErrorM = null
+        arFrame = null
+        arFrameSession = -1
+        firstCornerHit = null
+        alignFirst = null
         tool = PlanTool.NONE
         layoutPhase = LayoutPhase.SETTINGS
     }
@@ -276,16 +290,17 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         closureErrorM = null
         arFrame = null
         arFrameSession = -1
+        firstCornerHit = null
+        alignFirst = null
         tool = PlanTool.NONE
         layoutPhase = LayoutPhase.OUTLINE
-        note = "Stand in the corner you want as the origin with a wall on your left, point " +
-            "the camera along that wall, and set the origin."
+        note = null
     }
 
     /**
-     * The manual outline: a rectangle whose origin corner has the length wall on your left.
-     * +y runs along that wall and +x across the room, which matches the AR frame, so AR can
-     * still be used for the points by setting the origin at that same corner.
+     * The manual outline: a rectangle whose length wall runs from corner 1 at (0, 0) to corner 2
+     * at (0, length), with the room to its right. That is the same frame the AR outline uses, so
+     * aiming at those two corners with Align lets AR place the points.
      */
     fun useRectangle(widthM: Double, lengthM: Double) {
         draftCorners = listOf(
@@ -298,8 +313,8 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         closureErrorM = null
         tool = PlanTool.NONE
         layoutPhase = LayoutPhase.POINTS
-        note = "Mark each survey position. Use AR by setting the origin at corner (0, 0), or " +
-            "switch on Tap to add and place points by hand."
+        note = "Mark each survey position. To use AR, press Align and aim at corner 1 then " +
+            "corner 2 of the length wall. Otherwise switch on Tap to add."
     }
 
     /** True when the frame was set in an ARCore session that has since been replaced. */
@@ -313,56 +328,115 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         return frame.toRoom(pose.worldX, pose.worldZ)
     }
 
-    fun setOrigin(pose: ArPose) {
-        if (!pose.tracking) {
-            note = "ARCore is not tracking yet. " + (pose.problem ?: "")
-            return
-        }
-        val frame = RoomFrame.at(pose.worldX, pose.worldZ, pose.lookX, pose.lookZ)
-        if (frame == null) {
-            note = "Hold the phone upright and point the camera along the wall, not at the " +
-                "floor or ceiling."
-            return
-        }
-        arFrame = frame
-        arFrameSession = pose.sessionId
-        if (layoutPhase == LayoutPhase.OUTLINE && draftCorners.isEmpty()) {
-            draftCorners = listOf(Pt(0.0, 0.0))
-            note = "Origin set. Walk the walls and mark each corner, then come back here " +
-                "and close the outline."
-        } else {
-            note = "Origin set at corner (0, 0)."
-        }
-    }
+    /**
+     * Adds the corner under the crosshair. Corner 1 becomes the origin; corner 2, the other end
+     * of the same wall, fixes the direction of the frame; every later corner is placed in it.
+     */
+    fun markCornerAt(hit: ArHit) {
+        val frame = arFrame
+        val first = firstCornerHit
+        when {
+            draftCorners.isEmpty() || first == null -> {
+                firstCornerHit = hit
+                draftCorners = listOf(Pt(0.0, 0.0))
+            }
 
-    fun markCorner(pose: ArPose) {
-        val here = positionOf(pose)
-        if (here == null) {
-            note = "No AR position right now. " + (pose.problem ?: "")
-            return
+            frame == null -> {
+                if (first.sessionId != hit.sessionId) {
+                    note = "ARCore restarted between the first two corners, so the outline has " +
+                        "to start again."
+                    beginArOutline()
+                    return
+                }
+                val defined = RoomFrame.alongWall(first.worldX, first.worldZ, hit.worldX, hit.worldZ)
+                if (defined == null) {
+                    note = "That is almost the same spot as corner 1. Aim at the other end of " +
+                        "the wall."
+                    return
+                }
+                arFrame = defined
+                arFrameSession = hit.sessionId
+                draftCorners = draftCorners + defined.toRoom(hit.worldX, hit.worldZ)
+            }
+
+            hit.sessionId != arFrameSession -> {
+                note = "ARCore restarted, so its world no longer matches. Press Align and aim " +
+                    "at corner 1 then corner 2 before marking more corners."
+                return
+            }
+
+            else -> draftCorners = draftCorners + frame.toRoom(hit.worldX, hit.worldZ)
         }
-        draftCorners = draftCorners + here
+        note = String.format(
+            "Corner %d marked from %.1f m away, measured off %s.",
+            draftCorners.size,
+            hit.distanceM,
+            hit.surface
+        )
     }
 
     fun undoCorner() {
-        if (draftCorners.size > 1) draftCorners = draftCorners.dropLast(1)
+        if (draftCorners.isEmpty()) return
+        draftCorners = draftCorners.dropLast(1)
+        // The frame comes from corners 1 and 2, so it goes when either does.
+        if (draftCorners.size < 2) {
+            arFrame = null
+            arFrameSession = -1
+        }
+        if (draftCorners.isEmpty()) firstCornerHit = null
     }
 
-    /** Called when you have walked the whole perimeter and are back on the origin corner. */
-    fun closeOutline(pose: ArPose) {
+    /**
+     * Closes the outline by aiming back at corner 1. How far that second measurement lands from
+     * where corner 1 was first marked is the drift over the whole outline.
+     */
+    fun closeOutlineAt(hit: ArHit?) {
         if (draftCorners.size < 3) {
             note = "An outline needs at least three corners."
             return
         }
-        closureErrorM = positionOf(pose)?.let { distance(Pt(0.0, 0.0), it) }
+        val frame = arFrame
+        closureErrorM = if (hit != null && frame != null && hit.sessionId == arFrameSession) {
+            distance(frame.toRoom(hit.worldX, hit.worldZ), draftCorners[0])
+        } else {
+            null
+        }
         closurePromptOpen = true
+    }
+
+    /**
+     * Re-establishes the AR frame from corners 1 and 2, used on a typed rectangle or after ARCore
+     * restarts. The first call records corner 1 and the second completes the alignment.
+     */
+    fun alignAt(hit: ArHit) {
+        val first = alignFirst
+        if (first == null || first.sessionId != hit.sessionId) {
+            alignFirst = hit
+            note = "Corner 1 recorded. Now aim at corner 2, the other end of the same wall, and " +
+                "press Align again."
+            return
+        }
+        alignFirst = null
+        val frame = RoomFrame.alongWall(first.worldX, first.worldZ, hit.worldX, hit.worldZ)
+        if (frame == null) {
+            note = "Those two aims landed almost on the same spot. Start Align again."
+            return
+        }
+        // Keep corner 1 where the plan has it, in case it was dragged.
+        arFrame = frame.anchoredAt(first.worldX, first.worldZ, draftCorners.firstOrNull() ?: Pt(0.0, 0.0))
+        arFrameSession = hit.sessionId
+        note = "Aligned. AR positions now match the plan."
+    }
+
+    fun cancelAlign() {
+        alignFirst = null
     }
 
     fun acknowledgeClosure() {
         closurePromptOpen = false
         layoutPhase = LayoutPhase.POINTS
-        note = "Walk to each survey position and mark it. If the marker drifts, use I'm here " +
-            "to tap where you really are."
+        note = "Stand at each survey position and press Mark here. If the marker drifts, use " +
+            "I'm here to tap where you really are."
     }
 
     fun markPointAr(pose: ArPose) {

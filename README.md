@@ -10,23 +10,25 @@ any other location fix.
 1. **Settings.** Name the survey, choose whether it is mainly about Wi-Fi or cellular, set the
    samples per point, and optionally override the ping target. Then pick how to get the room
    outline: walk it with AR, or type the width and length of a rectangular room.
-2. **Walk the walls (AR).** Stand in the corner you want as the origin with a wall on your
-   left, point the camera along that wall, and set the origin. That corner becomes (0, 0), the
-   wall on your left is the +y axis and +x points into the room. Walk the perimeter marking
-   each corner, return to the start and close the outline. The app reports how far ARCore
-   puts you from the origin at that moment, which is the drift over the loop. Corners are kept
-   exactly as marked and that figure is stored with the survey.
+2. **Measure the outline (AR).** You never have to reach a corner, so tables along the walls
+   do not matter. Face any wall, aim the crosshair at its left-hand corner, anywhere up the
+   edge where the two walls meet, and press *Mark corner*; ARCore measures where the line of
+   sight hits the wall. That corner becomes (0, 0). Aim at the right-hand corner of the same
+   wall next: that wall becomes the +y axis and +x points back into the room. Carry on round
+   the room to your right. To finish, aim at corner 1 again and press *Close*: how far that
+   second measurement lands from the first is the closure error. Corners are kept exactly as
+   measured and the figure is stored with the survey.
 3. **Mark the points.** Walk to each survey position and press *Mark here*. When AR is not
    available or not trusted, the manual tools take over:
    - *Tap to add* places a point wherever you tap on the plan.
    - *I'm here* corrects drift: tap where you really are and every later AR position shifts
      to match. Tapping near a corner snaps to it exactly.
-   - *Reset origin* re-establishes the whole frame from corner (0, 0), which is what to do if
-     ARCore restarts and loses its world.
+   - *Align* re-establishes the whole frame by aiming at corner 1 and then corner 2, which is
+     what to do if ARCore restarts and loses its world.
    - Long-press and drag moves any corner or point.
 
-   With the typed rectangle you can still use AR for the points by setting the origin at
-   corner (0, 0). Logging only becomes available once the layout is finished.
+   With the typed rectangle you can still use AR for the points: press *Align* and aim at the
+   two ends of the length wall. Logging only becomes available once the layout is finished.
 4. **Grid.** The plan shows the outline and the points. Grey means pending, a pulsing marker
    means the point is being logged, and a point that is done is coloured by the survey's
    primary metric. Tap a point to open its sheet and press *Start logging*; long-press a point
@@ -45,7 +47,13 @@ sensors. It is not affected by stride length or by the magnetic interference tha
 compass headings indoors, and drift over a room is typically tens of centimetres. Tracking
 fails on blank walls, in dim light, and when you move fast, so keep the camera pointed at
 something with texture and walk steadily. The app is locked to portrait so a rotation cannot
-restart the session mid-walk.
+restart the session mid-survey.
+
+Aimed corners come from ARCore hit tests. On phones with the Depth API they hit any visible
+surface, plain walls included. Without it they need a detected wall plane or a tracked
+feature point, so aim at a spot with some texture, such as a socket, a poster edge or where
+the walls meet the ceiling, and sweep the camera over the wall first. Each measurement
+reports its distance; aiming from further than a few metres costs accuracy.
 
 Every point records whether ARCore placed it or you did (`source` is `AR` or `MANUAL`, and a
 dragged point becomes `MANUAL`). The outline records `AR`, `MANUAL` or `MIXED` for an AR walk
