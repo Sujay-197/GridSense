@@ -1,24 +1,32 @@
 # GridSense
 
-An indoor Wi-Fi and cellular coverage survey app for Android. Positions come from the phone
-counting your steps, starting at a corner of the room you pick yourself, so the app works in
-buildings with no floor plan and never touches GPS or any other location fix.
+An indoor Wi-Fi and cellular coverage survey app for Android. Positions come from ARCore
+motion tracking, starting at a corner of the room you pick yourself, with manual placement on
+the plan as a fallback. The app works in buildings with no floor plan and never touches GPS or
+any other location fix.
 
 ## How a survey runs
 
 1. **Settings.** Name the survey, choose whether it is mainly about Wi-Fi or cellular, set the
-   samples per point, and optionally override the ping target. Calibrate your stride by walking
-   a distance you have measured, because every position in the survey is derived from your step
-   count.
-2. **Walk the walls.** Stand in the corner you want as the origin, face into the room, and
-   start. That corner becomes (0, 0) and the direction you are facing becomes the +y axis. Walk
-   the perimeter, marking each corner as you reach it, then return to where you started and
-   close the outline. The app reports how far dead reckoning thinks you are from the origin,
-   which is the drift accumulated over the whole loop. The corners are kept exactly as
-   measured and that figure is stored with the survey.
-3. **Mark the points.** Walk to each position you want to survey and mark it. If the live
-   marker drifts away from where you actually are, re-anchor it to any corner you are standing
-   on. Logging only becomes available once the layout is finished.
+   samples per point, and optionally override the ping target. Then pick how to get the room
+   outline: walk it with AR, or type the width and length of a rectangular room.
+2. **Walk the walls (AR).** Stand in the corner you want as the origin with a wall on your
+   left, point the camera along that wall, and set the origin. That corner becomes (0, 0), the
+   wall on your left is the +y axis and +x points into the room. Walk the perimeter marking
+   each corner, return to the start and close the outline. The app reports how far ARCore
+   puts you from the origin at that moment, which is the drift over the loop. Corners are kept
+   exactly as marked and that figure is stored with the survey.
+3. **Mark the points.** Walk to each survey position and press *Mark here*. When AR is not
+   available or not trusted, the manual tools take over:
+   - *Tap to add* places a point wherever you tap on the plan.
+   - *I'm here* corrects drift: tap where you really are and every later AR position shifts
+     to match. Tapping near a corner snaps to it exactly.
+   - *Reset origin* re-establishes the whole frame from corner (0, 0), which is what to do if
+     ARCore restarts and loses its world.
+   - Long-press and drag moves any corner or point.
+
+   With the typed rectangle you can still use AR for the points by setting the origin at
+   corner (0, 0). Logging only becomes available once the layout is finished.
 4. **Grid.** The plan shows the outline and the points. Grey means pending, a pulsing marker
    means the point is being logged, and a point that is done is coloured by the survey's
    primary metric. Tap a point to open its sheet and press *Start logging*; long-press a point
@@ -32,16 +40,17 @@ buildings with no floor plan and never touches GPS or any other location fix.
 
 ## Positioning, and what it costs you
 
-Dead reckoning advances your position by one stride every time the step detector fires, in the
-direction the rotation vector sensor reports. Hold the phone flat with its top edge pointing
-the way you walk.
+ARCore tracks the phone from visual features in the camera image combined with the motion
+sensors. It is not affected by stride length or by the magnetic interference that ruins
+compass headings indoors, and drift over a room is typically tens of centimetres. Tracking
+fails on blank walls, in dim light, and when you move fast, so keep the camera pointed at
+something with texture and walk steadily. The app is locked to portrait so a rotation cannot
+restart the session mid-walk.
 
-The dominant error is heading, not distance. Indoors the magnetometer is pulled by steel studs,
-lift shafts, electrical risers and metal door frames, so expect position error on the order of
-one to three metres over a room-sized walk. Re-anchoring at a corner you are physically
-standing on clears the drift accumulated so far and is the main way to keep it bounded. Quote
-the closure error from the perimeter walk in your report; it is an honest measure of how good
-the geometry is.
+Every point records whether ARCore placed it or you did (`source` is `AR` or `MANUAL`, and a
+dragged point becomes `MANUAL`). The outline records `AR`, `MANUAL` or `MIXED` for an AR walk
+whose corners were later dragged. Report these along with the closure error; together they
+say how much of the geometry was measured and how much was judged by eye.
 
 ## What is measured at each point
 
@@ -62,10 +71,10 @@ regardless of which one the survey is nominally about.
 Android reports the SSID as `<unknown ssid>` and the BSSID as `02:00:00:00:00:00`, and refuses
 to return cell info at all, unless the app holds `ACCESS_FINE_LOCATION` and location services
 are switched on. That is an Android requirement for reading radio identifiers, not something
-GridSense wants for itself: the app never requests a location fix. `ACTIVITY_RECOGNITION` is
-needed separately, because that is what lets the phone report each step. The first launch
-explains all of this and logging stays blocked until the permissions, the location services
-switch and a readable radio are all in place.
+GridSense wants for itself: the app never requests a location fix. `CAMERA` is used only by
+ARCore for tracking; no image is stored. ARCore is declared optional, so the app installs on
+phones without it and falls back to manual placement. Logging stays blocked until the location
+permission, the location services switch and a readable radio are all in place.
 
 ## Building
 
@@ -76,15 +85,15 @@ Requires JDK 17 and the Android SDK with platform 34.
 ./gradlew :app:testDebugUnitTest
 ```
 
-The unit tests cover the pure survey mathematics: point-in-polygon, dead-reckoning step
-displacement, stride calibration, closure distance, median, jitter, inverse distance weighting
-and the ping output parser.
+The unit tests cover the pure survey mathematics: point-in-polygon, the mapping from ARCore's
+world onto the room frame, re-anchoring, closure distance, median, jitter, inverse distance
+weighting and the ping output parser. ARCore itself only runs on a real phone.
 
 ## Data model
 
 ```
-SurveyRoom(name, mode, stepLengthM, samplesPerPoint, pingHost, polygon, closureErrorM, createdAt)
-  GridPoint(seq, x, y, enabled, status)
+SurveyRoom(name, mode, samplesPerPoint, pingHost, polygon, outlineSource, closureErrorM, createdAt)
+  GridPoint(seq, x, y, source, enabled, status)
     Sample(ts, kind,
            bssid, ssid, freqMhz, rssiDbm, linkSpeedMbps,
            cellTech, cellDbm, cellLevel, rsrp, rsrq, sinr, cellId, tac, pci, arfcn, operator,
@@ -93,6 +102,6 @@ SurveyRoom(name, mode, stepLengthM, samplesPerPoint, pingHost, polygon, closureE
 ```
 
 Positions are metres from the origin corner. Surveys persist in Room, so one can be closed and
-resumed mid-way, although the layout walk itself has to be finished in a single session because
-the tracker's frame of reference is not saved. A point left mid-run by a killed process goes
+resumed mid-way, although the layout itself has to be finished in one go because ARCore's frame
+of reference is not saved. A point left mid-run by a killed process goes
 back to pending when the survey is reopened.

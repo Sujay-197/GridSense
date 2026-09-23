@@ -54,7 +54,7 @@ fun HomeScreen(vm: SurveyViewModel) {
             ) {
                 Text("No rooms yet", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Create a survey, walk its outline from a corner you pick as the origin, then mark the points you want to log.",
+                    "Create a survey, walk its outline with AR or enter the room size, then mark the points you want to log.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -79,8 +79,8 @@ fun HomeScreen(vm: SurveyViewModel) {
                             Text(room.name, style = MaterialTheme.typography.titleMedium)
                             Text(
                                 modeOf(room).label + " survey, " + room.samplesPerPoint +
-                                    " samples per point, stride " +
-                                    String.format("%.2f", room.stepLengthM) + " m",
+                                    " samples per point, outline " +
+                                    room.outlineSource.lowercase(),
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }

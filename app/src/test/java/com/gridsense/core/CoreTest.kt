@@ -45,49 +45,70 @@ class CoreTest {
         assertEquals(6.0, b.height, 1e-9)
     }
 
-    // --- dead reckoning ----------------------------------------------------
+    // --- AR room frame -----------------------------------------------------
 
-    @Test
-    fun anglesWrapIntoHalfTurns() {
-        assertEquals(0.0, normaliseAngle(2 * Math.PI), 1e-9)
-        assertEquals(-Math.PI / 2, normaliseAngle(3 * Math.PI / 2), 1e-9)
-        assertEquals(Math.PI, normaliseAngle(Math.PI), 1e-9)
+    private fun near(expected: Pt, actual: Pt) {
+        assertEquals(expected.x, actual.x, 1e-9)
+        assertEquals(expected.y, actual.y, 1e-9)
     }
 
     @Test
-    fun walkingTheReferenceDirectionAdvancesPlusY() {
-        val step = stepDisplacement(0.7, azimuth = 0.0, reference = 0.0)
-        assertEquals(0.0, step.x, 1e-9)
-        assertEquals(0.7, step.y, 1e-9)
+    fun lookingDownMinusZWalkingForwardIsPlusY() {
+        // ARCore's default camera looks along -z.
+        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        near(Pt(0.0, 2.0), frame.toRoom(0.0, -2.0))
     }
 
     @Test
-    fun turningRightAdvancesPlusX() {
-        val step = stepDisplacement(0.7, azimuth = Math.PI / 2, reference = 0.0)
-        assertEquals(0.7, step.x, 1e-9)
-        assertEquals(0.0, step.y, 1e-9)
+    fun theRoomsPlusXIsToTheRightOfTheWall() {
+        // Facing -z in a y-up right-handed world, your right is +x.
+        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        near(Pt(1.5, 0.0), frame.toRoom(1.5, 0.0))
     }
 
     @Test
-    fun walkingBackTowardsTheOriginIsNegativeY() {
-        val step = stepDisplacement(0.7, azimuth = Math.PI, reference = 0.0)
-        assertEquals(0.0, step.x, 1e-9)
-        assertEquals(-0.7, step.y, 1e-9)
+    fun theFrameFollowsTheDirectionTheOriginWasSetIn() {
+        // Facing +x, your right is +z, and the origin can be anywhere in ARCore's world.
+        val frame = RoomFrame.at(10.0, 5.0, 1.0, 0.0)!!
+        near(Pt(0.0, 3.0), frame.toRoom(13.0, 5.0))
+        near(Pt(2.0, 0.0), frame.toRoom(10.0, 7.0))
     }
 
     @Test
-    fun theReferenceHeadingDefinesTheRoomFrame() {
-        // Facing east when the origin was set means east is the room's +y.
-        val step = stepDisplacement(1.0, azimuth = Math.PI / 2, reference = Math.PI / 2)
-        assertEquals(0.0, step.x, 1e-9)
-        assertEquals(1.0, step.y, 1e-9)
+    fun theLookDirectionIsNormalised() {
+        // A camera tilted down still gives a unit heading from its horizontal part.
+        val frame = RoomFrame.at(0.0, 0.0, 0.0, -0.6)!!
+        near(Pt(0.0, 1.0), frame.toRoom(0.0, -1.0))
     }
 
     @Test
-    fun strideComesFromAMeasuredWalk() {
-        assertEquals(0.75, calibrateStepLength(15.0, 20)!!, 1e-9)
-        assertEquals(null, calibrateStepLength(15.0, 0))
-        assertEquals(null, calibrateStepLength(0.0, 20))
+    fun aCameraPointedAtTheFloorGivesNoFrame() {
+        assertEquals(null, RoomFrame.at(0.0, 0.0, 0.1, -0.2))
+    }
+
+    @Test
+    fun reanchoringMapsTheCurrentPositionOntoTheTappedOne() {
+        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        // ARCore thinks you are at room (1, 4); you tap (1.3, 3.8) because it drifted.
+        val anchored = frame.anchoredAt(1.0, -4.0, Pt(1.3, 3.8))
+        near(Pt(1.3, 3.8), anchored.toRoom(1.0, -4.0))
+        // Everything after is shifted by the same amount.
+        near(Pt(2.3, 4.8), anchored.toRoom(2.0, -5.0))
+    }
+
+    @Test
+    fun reanchoringTwiceDoesNotStackOffsets() {
+        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+            .anchoredAt(0.0, -1.0, Pt(5.0, 5.0))
+            .anchoredAt(0.0, -1.0, Pt(0.0, 1.0))
+        near(Pt(0.0, 1.0), frame.toRoom(0.0, -1.0))
+    }
+
+    @Test
+    fun headingIsMeasuredClockwiseFromPlusY() {
+        val frame = RoomFrame.at(0.0, 0.0, 0.0, -1.0)!!
+        assertEquals(0.0, frame.headingOf(0.0, -1.0), 1e-9)
+        assertEquals(Math.PI / 2, frame.headingOf(1.0, 0.0), 1e-9)
     }
 
     @Test

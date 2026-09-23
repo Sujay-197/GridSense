@@ -57,6 +57,7 @@ import com.gridsense.core.Pt
 import com.gridsense.data.GridPoint
 import com.gridsense.data.KIND_CELL
 import com.gridsense.data.KIND_PING
+import com.gridsense.data.SOURCE_AR
 import com.gridsense.data.STATUS_DONE
 import com.gridsense.data.Sample
 import com.gridsense.data.decodePolygon
@@ -326,7 +327,11 @@ private fun PointSheet(vm: SurveyViewModel, point: GridPoint, samples: List<Samp
             String.format("Position %.2f m, %.2f m", point.x, point.y),
             style = MaterialTheme.typography.bodySmall
         )
-        Text("Status: " + point.status, style = MaterialTheme.typography.bodySmall)
+        Text(
+            "Status: " + point.status + ", placed " +
+                (if (point.source == SOURCE_AR) "by AR" else "by hand"),
+            style = MaterialTheme.typography.bodySmall
+        )
 
         if (median != null) {
             Text(String.format("Median Wi-Fi RSSI %.1f dBm", median))

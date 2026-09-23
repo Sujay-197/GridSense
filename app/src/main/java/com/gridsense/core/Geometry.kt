@@ -72,3 +72,6 @@ fun idw(obs: List<Obs>, x: Double, y: Double): Double {
     }
     return numerator / denominator
 }
+
+/** Straight line distance between two positions in metres. */
+fun distance(a: Pt, b: Pt): Double = kotlin.math.hypot(b.x - a.x, b.y - a.y)

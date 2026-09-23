@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [SurveyRoom::class, GridPoint::class, Sample::class, Router::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class Db : RoomDatabase() {

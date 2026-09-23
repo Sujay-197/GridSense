@@ -45,14 +45,17 @@ fun AppRoot(vm: SurveyViewModel = viewModel()) {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) vm.refreshReadiness()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.refreshReadiness()
+                vm.refreshArStatus()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val ready = vm.readiness
-    if ((!ready.canLog || !ready.canWalk) && !vm.rationaleDismissed) {
+    if (!ready.canLog && !vm.rationaleDismissed) {
         PermissionScreen(
             readiness = vm.readiness,
             onGrant = { permissionLauncher.launch(requiredPermissions()) },

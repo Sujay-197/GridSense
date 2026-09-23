@@ -53,14 +53,15 @@ fun PermissionScreen(
         )
 
         Text(
-            "GridSense never requests a location fix and never uses GPS. Your position is " +
-                "worked out from your own steps, starting at a corner you choose.",
+            "GridSense never requests a location fix and never uses GPS. Your position comes " +
+                "from ARCore tracking the camera image, starting at a corner you choose, or " +
+                "from you placing it on the plan by hand.",
             style = MaterialTheme.typography.bodyMedium
         )
 
         Text(
-            "The physical activity permission is what lets the phone report each step, which " +
-                "is how the survey knows where you are.",
+            "The camera is only used for AR tracking. No images are stored or sent anywhere, " +
+                "and without it you can still place every point by hand.",
             style = MaterialTheme.typography.bodyMedium
         )
 
@@ -71,18 +72,16 @@ fun PermissionScreen(
             ) {
                 StatusLine("Location permission granted", readiness.locationPermissionGranted)
                 StatusLine("Nearby Wi-Fi permission granted", readiness.nearbyWifiPermissionGranted)
-                StatusLine("Physical activity permission granted", readiness.activityRecognitionGranted)
+                StatusLine("Camera permission granted", readiness.cameraPermissionGranted)
                 StatusLine("Location services switched on", readiness.locationServicesOn)
                 StatusLine("Wi-Fi identifiers readable", readiness.wifiIdentifiersReadable)
                 StatusLine("Serving cell readable", readiness.cellularReadable)
-                StatusLine("Step detector present", readiness.stepSensorPresent)
-                StatusLine("Rotation vector sensor present", readiness.headingSensorPresent)
             }
         }
 
         if (!readiness.locationPermissionGranted ||
             !readiness.nearbyWifiPermissionGranted ||
-            !readiness.activityRecognitionGranted
+            !readiness.cameraPermissionGranted
         ) {
             Button(onClick = onGrant, modifier = Modifier.fillMaxWidth()) {
                 Text("Grant permission")

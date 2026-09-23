@@ -60,10 +60,10 @@ fun writeCsvs(
 
     val pointsFile = File(exportsDir(context), base + "_points.csv")
     pointsFile.bufferedWriter().use { w ->
-        w.write(csvRow(listOf("point_id", "seq", "x_m", "y_m", "enabled", "status")))
+        w.write(csvRow(listOf("point_id", "seq", "x_m", "y_m", "source", "enabled", "status")))
         w.newLine()
         for (p in points) {
-            w.write(csvRow(listOf(p.id, p.seq, p.x, p.y, p.enabled, p.status)))
+            w.write(csvRow(listOf(p.id, p.seq, p.x, p.y, p.source, p.enabled, p.status)))
             w.newLine()
         }
     }
@@ -73,7 +73,7 @@ fun writeCsvs(
         w.write(
             csvRow(
                 listOf(
-                    "sample_id", "point_id", "seq", "x_m", "y_m", "ts_epoch_ms",
+                    "sample_id", "point_id", "seq", "x_m", "y_m", "position_source", "ts_epoch_ms",
                     "kind", "bssid", "ssid", "freq_mhz", "rssi_dbm", "link_speed_mbps",
                     "cell_tech", "cell_dbm", "cell_level", "rsrp", "rsrq", "sinr",
                     "cell_id", "tac", "pci", "arfcn", "operator",
@@ -87,7 +87,7 @@ fun writeCsvs(
             w.write(
                 csvRow(
                     listOf(
-                        s.id, s.pointId, p?.seq, p?.x, p?.y, s.ts, s.kind, s.bssid, s.ssid,
+                        s.id, s.pointId, p?.seq, p?.x, p?.y, p?.source, s.ts, s.kind, s.bssid, s.ssid,
                         s.freqMhz, s.rssiDbm, s.linkSpeedMbps,
                         s.cellTech, s.cellDbm, s.cellLevel, s.rsrp, s.rsrq, s.sinr,
                         s.cellId, s.tac, s.pci, s.arfcn, s.operator,
@@ -145,10 +145,10 @@ fun writeJson(
         w.write("\"id\": " + room.id)
         w.write(", \"name\": " + jsonString(room.name))
         w.write(", \"mode\": " + jsonString(room.mode))
-        w.write(", \"step_length_m\": " + room.stepLengthM)
+        w.write(", \"outline_source\": " + jsonString(room.outlineSource))
         w.write(", \"samples_per_point\": " + room.samplesPerPoint)
         w.write(", \"ping_host\": " + jsonString(room.pingHost))
-        w.write(", \"closure_error_m\": " + room.closureErrorM)
+        w.write(", \"closure_error_m\": " + jsonNumber(room.closureErrorM))
         w.write(", \"polygon_m\": " + jsonString(room.polygon))
         w.write(", \"created_at\": " + room.createdAt)
         w.write("},\n")
@@ -158,6 +158,7 @@ fun writeJson(
             w.write(
                 "    {\"id\": " + p.id + ", \"seq\": " + p.seq +
                     ", \"x_m\": " + p.x + ", \"y_m\": " + p.y +
+                    ", \"source\": " + jsonString(p.source) +
                     ", \"enabled\": " + p.enabled + ", \"status\": " + jsonString(p.status) + "}"
             )
             w.write(if (index == points.lastIndex) "\n" else ",\n")

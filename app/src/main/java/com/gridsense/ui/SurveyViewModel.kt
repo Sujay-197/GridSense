@@ -7,8 +7,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.gridsense.ar.ArPose
+import com.gridsense.ar.ArStatus
+import com.gridsense.ar.checkArStatus
 import com.gridsense.core.Metric
 import com.gridsense.core.Pt
+import com.gridsense.core.RoomFrame
 import com.gridsense.core.SurveyMode
 import com.gridsense.core.distance
 import com.gridsense.data.Db
@@ -19,6 +23,9 @@ import com.gridsense.data.KIND_PING
 import com.gridsense.data.KIND_SCAN
 import com.gridsense.data.KIND_SCAN_CACHED
 import com.gridsense.data.Router
+import com.gridsense.data.SOURCE_AR
+import com.gridsense.data.SOURCE_MANUAL
+import com.gridsense.data.SOURCE_MIXED
 import com.gridsense.data.STATUS_DONE
 import com.gridsense.data.STATUS_LOGGING
 import com.gridsense.data.STATUS_PENDING
@@ -32,7 +39,6 @@ import com.gridsense.net.pingTarget
 import com.gridsense.net.readCell
 import com.gridsense.net.readLink
 import com.gridsense.net.readReadiness
-import com.gridsense.pdr.PdrTracker
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -50,8 +56,14 @@ sealed interface Screen {
     data class Survey(val roomId: Long) : Screen
 }
 
-/** The three steps of laying a survey out: settings, walk the walls, then mark the points. */
+/** The steps of laying a survey out: settings, the AR outline walk, then marking the points. */
 enum class LayoutPhase { SETTINGS, OUTLINE, POINTS }
+
+/** What a tap on the layout plan does. Long-press and drag always moves a corner or point. */
+enum class PlanTool { NONE, ADD_POINT, REANCHOR }
+
+/** A survey point while the layout is still being edited. */
+data class DraftPoint(val position: Pt, val source: String)
 
 private const val PING_COUNT = 10
 private const val POLL_INTERVAL_MS = 500L
@@ -63,13 +75,16 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     private val dao = Db.get(app).dao()
     private val scanner = NeighbourScanner(app)
 
-    val tracker = PdrTracker(app)
-
     var screen by mutableStateOf<Screen>(Screen.Home)
         private set
 
     var readiness by mutableStateOf(readReadiness(app))
         private set
+
+    var arStatus by mutableStateOf(ArStatus.CHECKING)
+        private set
+
+    private var arCheckJob: Job? = null
 
     var rationaleDismissed by mutableStateOf(false)
         private set
@@ -85,22 +100,32 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     var draftMode by mutableStateOf(SurveyMode.WIFI)
     var draftPingHost by mutableStateOf("")
     var draftSamples by mutableStateOf("10")
+    var draftWidth by mutableStateOf("")
+    var draftLength by mutableStateOf("")
 
     var draftCorners by mutableStateOf<List<Pt>>(emptyList())
         private set
 
-    var draftPoints by mutableStateOf<List<Pt>>(emptyList())
+    var draftPoints by mutableStateOf<List<DraftPoint>>(emptyList())
         private set
 
-    /** Drift measured when the perimeter walk returned to the origin corner. */
-    var closureErrorM by mutableStateOf(0.0)
+    private var outlineSource = SOURCE_MANUAL
+
+    /** Drift measured when the AR outline walk returned to the origin corner. */
+    var closureErrorM by mutableStateOf<Double?>(null)
         private set
 
     var closurePromptOpen by mutableStateOf(false)
         private set
 
-    var calibrationPromptOpen by mutableStateOf(false)
+    /** How ARCore's world maps onto the room, once the origin has been set. */
+    var arFrame by mutableStateOf<RoomFrame?>(null)
         private set
+
+    /** The ARCore session the frame belongs to. A new session means a new, unrelated world. */
+    private var arFrameSession = -1
+
+    var tool by mutableStateOf(PlanTool.NONE)
 
     // --- logging -----------------------------------------------------------
 
@@ -161,9 +186,8 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         .flatMapLatest { id -> if (id == null) flowOf(emptyList()) else dao.routers(id) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    override fun onCleared() {
-        tracker.stop()
-        super.onCleared()
+    init {
+        refreshArStatus()
     }
 
     // --- navigation --------------------------------------------------------
@@ -172,12 +196,27 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         readiness = readReadiness(getApplication())
     }
 
+    /** ARCore can take a moment to decide, so keep asking while it says it is still checking. */
+    fun refreshArStatus() {
+        arCheckJob?.cancel()
+        arCheckJob = viewModelScope.launch {
+            repeat(50) {
+                val status = checkArStatus(getApplication())
+                if (status != ArStatus.CHECKING) {
+                    arStatus = status
+                    return@launch
+                }
+                delay(200)
+            }
+            arStatus = ArStatus.UNSUPPORTED
+        }
+    }
+
     fun dismissRationale() {
         rationaleDismissed = true
     }
 
     fun goHome() {
-        tracker.stop()
         screen = Screen.Home
         roomId.value = null
     }
@@ -204,55 +243,105 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         draftMode = SurveyMode.WIFI
         draftPingHost = ""
         draftSamples = "10"
+        draftWidth = ""
+        draftLength = ""
         draftCorners = emptyList()
         draftPoints = emptyList()
-        closureErrorM = 0.0
+        outlineSource = SOURCE_MANUAL
+        closureErrorM = null
+        arFrame = null
+        arFrameSession = -1
+        tool = PlanTool.NONE
         layoutPhase = LayoutPhase.SETTINGS
         note = null
         screen = Screen.Layout
-        tracker.start()
     }
 
     fun cancelLayout() {
         goHome()
     }
 
-    fun openCalibration() {
-        calibrationPromptOpen = true
-        tracker.startCalibration()
+    /** Leave the AR walk and go back to choose the outline another way. */
+    fun backToSettings() {
+        draftCorners = emptyList()
+        closureErrorM = null
+        tool = PlanTool.NONE
+        layoutPhase = LayoutPhase.SETTINGS
     }
 
-    fun cancelCalibration() {
-        tracker.finishCalibration(0.0)
-        calibrationPromptOpen = false
+    fun beginArOutline() {
+        draftCorners = emptyList()
+        draftPoints = emptyList()
+        outlineSource = SOURCE_AR
+        closureErrorM = null
+        arFrame = null
+        arFrameSession = -1
+        tool = PlanTool.NONE
+        layoutPhase = LayoutPhase.OUTLINE
+        note = "Stand in the corner you want as the origin with a wall on your left, point " +
+            "the camera along that wall, and set the origin."
     }
 
-    fun finishCalibration(distanceM: Double) {
-        val stride = tracker.finishCalibration(distanceM)
-        calibrationPromptOpen = false
-        note = if (stride == null) {
-            "Calibration needs at least one detected step and a distance above zero."
-        } else {
-            String.format("Stride set to %.2f m from %d steps.", stride, tracker.calibrationSteps)
-        }
+    /**
+     * The manual outline: a rectangle whose origin corner has the length wall on your left.
+     * +y runs along that wall and +x across the room, which matches the AR frame, so AR can
+     * still be used for the points by setting the origin at that same corner.
+     */
+    fun useRectangle(widthM: Double, lengthM: Double) {
+        draftCorners = listOf(
+            Pt(0.0, 0.0),
+            Pt(0.0, lengthM),
+            Pt(widthM, lengthM),
+            Pt(widthM, 0.0)
+        )
+        outlineSource = SOURCE_MANUAL
+        closureErrorM = null
+        tool = PlanTool.NONE
+        layoutPhase = LayoutPhase.POINTS
+        note = "Mark each survey position. Use AR by setting the origin at corner (0, 0), or " +
+            "switch on Tap to add and place points by hand."
     }
 
-    /** You are standing on the corner you chose as the origin, facing into the room. */
-    fun beginOutlineWalk() {
-        if (!tracker.start()) {
-            note = "This phone has no step detector, or the activity recognition permission " +
-                "is missing, so the walk cannot be tracked."
+    /** True when the frame was set in an ARCore session that has since been replaced. */
+    fun arFrameIsStale(pose: ArPose): Boolean =
+        arFrame != null && pose.sessionId != -1 && pose.sessionId != arFrameSession
+
+    /** Where ARCore puts you in room coordinates, or null when that is not known right now. */
+    fun positionOf(pose: ArPose): Pt? {
+        val frame = arFrame ?: return null
+        if (!pose.tracking || pose.sessionId != arFrameSession) return null
+        return frame.toRoom(pose.worldX, pose.worldZ)
+    }
+
+    fun setOrigin(pose: ArPose) {
+        if (!pose.tracking) {
+            note = "ARCore is not tracking yet. " + (pose.problem ?: "")
             return
         }
-        tracker.setOrigin()
-        draftCorners = listOf(Pt(0.0, 0.0))
-        draftPoints = emptyList()
-        layoutPhase = LayoutPhase.OUTLINE
-        note = "Walk the walls. Mark a corner every time you reach one, then return here."
+        val frame = RoomFrame.at(pose.worldX, pose.worldZ, pose.lookX, pose.lookZ)
+        if (frame == null) {
+            note = "Hold the phone upright and point the camera along the wall, not at the " +
+                "floor or ceiling."
+            return
+        }
+        arFrame = frame
+        arFrameSession = pose.sessionId
+        if (layoutPhase == LayoutPhase.OUTLINE && draftCorners.isEmpty()) {
+            draftCorners = listOf(Pt(0.0, 0.0))
+            note = "Origin set. Walk the walls and mark each corner, then come back here " +
+                "and close the outline."
+        } else {
+            note = "Origin set at corner (0, 0)."
+        }
     }
 
-    fun markCorner() {
-        draftCorners = draftCorners + tracker.position()
+    fun markCorner(pose: ArPose) {
+        val here = positionOf(pose)
+        if (here == null) {
+            note = "No AR position right now. " + (pose.problem ?: "")
+            return
+        }
+        draftCorners = draftCorners + here
     }
 
     fun undoCorner() {
@@ -260,36 +349,67 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Called when you have walked the whole perimeter and are back on the origin corner. */
-    fun closeOutline() {
+    fun closeOutline(pose: ArPose) {
         if (draftCorners.size < 3) {
             note = "An outline needs at least three corners."
             return
         }
-        closureErrorM = distance(Pt(0.0, 0.0), tracker.position())
+        closureErrorM = positionOf(pose)?.let { distance(Pt(0.0, 0.0), it) }
         closurePromptOpen = true
     }
 
     fun acknowledgeClosure() {
         closurePromptOpen = false
-        // You are standing on the origin, so put the tracker back there.
-        tracker.anchorTo(Pt(0.0, 0.0))
         layoutPhase = LayoutPhase.POINTS
-        note = "Now walk to each survey position and mark it. Re-anchor at a corner if the " +
-            "marker drifts away from where you are."
+        note = "Walk to each survey position and mark it. If the marker drifts, use I'm here " +
+            "to tap where you really are."
     }
 
-    fun markPoint() {
-        draftPoints = draftPoints + tracker.position()
+    fun markPointAr(pose: ArPose) {
+        val here = positionOf(pose)
+        if (here == null) {
+            note = "No AR position right now. " + (pose.problem ?: "") +
+                " Switch on Tap to add to place the point by hand."
+            return
+        }
+        draftPoints = draftPoints + DraftPoint(here, SOURCE_AR)
+    }
+
+    fun addPointManually(position: Pt) {
+        draftPoints = draftPoints + DraftPoint(position, SOURCE_MANUAL)
     }
 
     fun undoPoint() {
         if (draftPoints.isNotEmpty()) draftPoints = draftPoints.dropLast(1)
     }
 
-    fun anchorToCorner(index: Int) {
-        val corner = draftCorners.getOrNull(index) ?: return
-        tracker.anchorTo(corner)
-        note = String.format("Re-anchored to corner %d at %.2f m, %.2f m.", index, corner.x, corner.y)
+    /** Shifts the AR frame so where ARCore thinks you are becomes where you tapped. */
+    fun reanchor(pose: ArPose, truePosition: Pt) {
+        tool = PlanTool.NONE
+        val frame = arFrame
+        if (frame == null || !pose.tracking || pose.sessionId != arFrameSession) {
+            note = "Re-anchoring needs AR to be tracking with the origin set."
+            return
+        }
+        arFrame = frame.anchoredAt(pose.worldX, pose.worldZ, truePosition)
+        note = String.format(
+            "Re-anchored to %.2f m, %.2f m. Later AR positions are shifted to match.",
+            truePosition.x,
+            truePosition.y
+        )
+    }
+
+    fun moveCorner(index: Int, position: Pt) {
+        if (index !in draftCorners.indices) return
+        draftCorners = draftCorners.mapIndexed { i, c -> if (i == index) position else c }
+        if (outlineSource == SOURCE_AR) outlineSource = SOURCE_MIXED
+    }
+
+    fun movePoint(index: Int, position: Pt) {
+        if (index !in draftPoints.indices) return
+        draftPoints = draftPoints.mapIndexed { i, p ->
+            if (i == index) DraftPoint(position, SOURCE_MANUAL) else p
+        }
     }
 
     fun finishLayout() {
@@ -298,18 +418,18 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         val positions = draftPoints
         val host = draftPingHost.trim().ifBlank { null }
         val mode = draftMode
-        val stride = tracker.stepLengthM
         val name = draftName.trim()
+        val source = outlineSource
         val closure = closureErrorM
         viewModelScope.launch {
             val id = dao.insertRoom(
                 SurveyRoom(
                     name = name,
                     mode = mode.name,
-                    stepLengthM = stride,
                     samplesPerPoint = samplesPerPoint,
                     pingHost = host,
                     polygon = encodePolygon(corners),
+                    outlineSource = source,
                     closureErrorM = closure,
                     createdAt = System.currentTimeMillis()
                 )
@@ -319,14 +439,14 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
                     GridPoint(
                         roomId = id,
                         seq = index,
-                        x = p.x,
-                        y = p.y,
+                        x = p.position.x,
+                        y = p.position.y,
+                        source = p.source,
                         enabled = true,
                         status = STATUS_PENDING
                     )
                 }
             )
-            tracker.stop()
             openRoom(id)
         }
     }
