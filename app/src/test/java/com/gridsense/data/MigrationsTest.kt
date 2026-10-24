@@ -28,6 +28,27 @@ class MigrationsTest {
         }
     }
 
+    /** table -> (column -> defaultValue SQL), for columns that have one. */
+    private fun defaults(json: String): Map<String, Map<String, String>> =
+        json.split("\"tableName\": \"").drop(1).associate { chunk ->
+            chunk.substringBefore('"') to Regex(
+                "\"columnName\":\\s*\"(\\w+)\",\\s*\"affinity\":\\s*\"\\w+\",\\s*\"notNull\":\\s*(?:true|false),\\s*\"defaultValue\":\\s*\"((?:[^\"\\\\]|\\\\.)*)\""
+            ).findAll(chunk).associate { it.groupValues[1] to it.groupValues[2] }
+        }
+
+    @Test
+    fun migrationDefaultsMatchWhatRoomExpects() {
+        // Room validates the migrated table against the schema, default values included.
+        for (v in 4 until DB_VERSION) {
+            val expected = defaults(schema(v + 1)!!)
+            for (sql in ALL_MIGRATIONS.single { it.startVersion == v }.statements) {
+                val m = Regex("ALTER TABLE (\\w+) ADD COLUMN (\\w+) .*?(?:DEFAULT (.+))?$").find(sql)!!
+                val (table, col, def) = m.destructured
+                assertEquals("$table.$col default in $v to ${v + 1}", expected[table]?.get(col), def.ifEmpty { null })
+            }
+        }
+    }
+
     @Test
     fun everyVersionFromFourHasAnExportedSchema() {
         for (v in 4..DB_VERSION) assertNotNull("schema $v.json is missing", schema(v))
@@ -95,5 +116,19 @@ class MigrationsTest {
     fun sevenToEightAddsTheConditionWithADefault() {
         assertEquals(true, columns(schema(8)!!).getValue("survey_room")["condition"])
         assertTrue(MIGRATION_7_8.statements.single().endsWith("DEFAULT ''"))
+    }
+
+    @Test
+    fun eightToNineAddsTestSettingsWithDefaultsAndNullableProbeColumns() {
+        val room = columns(schema(9)!!).getValue("survey_room")
+        for (c in listOf("extendedTests", "loadTest", "dnsName", "tcpHost", "tcpPort", "downloadUrl")) {
+            assertEquals(c, true, room[c])
+        }
+        val sample = columns(schema(9)!!).getValue("sample")
+        for (c in listOf("probeMs", "probeOk", "bytes", "durationMs", "target")) assertEquals(c, false, sample[c])
+        val sql = MIGRATION_8_9.statements
+        assertTrue(sql.any { it.endsWith("extendedTests INTEGER NOT NULL DEFAULT 1") })
+        assertTrue(sql.any { it.endsWith("loadTest INTEGER NOT NULL DEFAULT 0") })
+        assertTrue(sql.any { it.contains("DEFAULT 'https://speed.cloudflare.com/__down?bytes=20000000'") })
     }
 }

@@ -85,7 +85,8 @@ fun writeCsvs(
                     "cell_tech", "cell_dbm", "cell_level", "rsrp", "rsrq", "sinr",
                     "cell_id", "tac", "pci", "arfcn", "operator",
                     "ping_host", "rtt_avg_ms", "rtt_jitter_ms", "rtt_loss_pct",
-                    "channel_width_mhz", "center_freq0_mhz", "wifi_standard"
+                    "channel_width_mhz", "center_freq0_mhz", "wifi_standard",
+                    "probe_ms", "probe_ok", "bytes", "duration_ms", "target"
                 )
             )
         )
@@ -101,7 +102,8 @@ fun writeCsvs(
                         s.cellTech, s.cellDbm, s.cellLevel, s.rsrp, s.rsrq, s.sinr,
                         s.cellId, s.tac, s.pci, s.arfcn, s.operator,
                         s.pingHost, s.rttAvgMs, s.rttJitterMs, s.rttLossPct,
-                        s.channelWidthMhz, s.centerFreq0Mhz, s.wifiStandard
+                        s.channelWidthMhz, s.centerFreq0Mhz, s.wifiStandard,
+                        s.probeMs, s.probeOk, s.bytes, s.durationMs, s.target
                     )
                 )
             )
@@ -156,6 +158,12 @@ fun writeJson(
         w.write(", \"name\": " + jsonString(room.name))
         w.write(", \"mode\": " + jsonString(room.mode))
         w.write(", \"condition\": " + jsonString(room.condition))
+        w.write(", \"extended_tests\": " + room.extendedTests)
+        w.write(", \"load_test\": " + room.loadTest)
+        w.write(", \"dns_name\": " + jsonString(room.dnsName))
+        w.write(", \"tcp_host\": " + jsonString(room.tcpHost))
+        w.write(", \"tcp_port\": " + room.tcpPort)
+        w.write(", \"download_url\": " + jsonString(room.downloadUrl))
         w.write(", \"grid_rows\": " + room.gridRows)
         w.write(", \"grid_cols\": " + room.gridCols)
         w.write(", \"cell_size_m\": " + room.cellSizeM)
@@ -204,7 +212,12 @@ fun writeJson(
                     ", \"rtt_loss_pct\": " + jsonNumber(s.rttLossPct) +
                     ", \"channel_width_mhz\": " + jsonNumber(s.channelWidthMhz) +
                     ", \"center_freq0_mhz\": " + jsonNumber(s.centerFreq0Mhz) +
-                    ", \"wifi_standard\": " + jsonNumber(s.wifiStandard) + "}"
+                    ", \"wifi_standard\": " + jsonNumber(s.wifiStandard) +
+                    ", \"probe_ms\": " + jsonNumber(s.probeMs) +
+                    ", \"probe_ok\": " + jsonNumber(s.probeOk) +
+                    ", \"bytes\": " + jsonNumber(s.bytes) +
+                    ", \"duration_ms\": " + jsonNumber(s.durationMs) +
+                    ", \"target\": " + jsonString(s.target) + "}"
             )
             w.write(if (index == samples.lastIndex) "\n" else ",\n")
         }

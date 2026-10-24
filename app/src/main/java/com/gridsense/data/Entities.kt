@@ -20,6 +20,25 @@ const val KIND_CELL = "CELL"
 /** A single row per point carrying the ping-derived latency, jitter and loss. */
 const val KIND_PING = "PING"
 
+/** One DNS lookup: [Sample.probeMs] and [Sample.probeOk], name in [Sample.target]. */
+const val KIND_DNS = "DNS"
+
+/** One TCP connect attempt: [Sample.probeMs] and [Sample.probeOk], "host:port" in [Sample.target]. */
+const val KIND_TCP = "TCP"
+
+/** One ping reply received during the load test, RTT in [Sample.probeMs], host in [Sample.target]. */
+const val KIND_LOADED_PING = "LOADED_PING"
+
+/** The load test's download: [Sample.bytes] over [Sample.durationMs], URL in [Sample.target]. */
+const val KIND_DOWNLOAD = "DOWNLOAD"
+
+const val DEFAULT_DNS_NAME = "example.com"
+const val DEFAULT_TCP_HOST = "1.1.1.1"
+const val DEFAULT_TCP_PORT = 443
+
+/** A third-party endpoint that may change, so it is a per-survey setting. */
+const val DEFAULT_DOWNLOAD_URL = "https://speed.cloudflare.com/__down?bytes=20000000"
+
 /** A neighbour AP seen by a fresh scan. */
 const val KIND_SCAN = "SCAN"
 
@@ -44,7 +63,21 @@ data class SurveyRoom(
     val createdAt: Long,
     /** The experimental condition, such as "door closed" or "router by the window". */
     @ColumnInfo(defaultValue = "")
-    val condition: String = ""
+    val condition: String = "",
+    /** DNS and TCP tests at every node, about 3 to 5 s extra. */
+    @ColumnInfo(defaultValue = "1")
+    val extendedTests: Boolean = true,
+    /** The download-under-load test. Off by default because it uses data. */
+    @ColumnInfo(defaultValue = "0")
+    val loadTest: Boolean = false,
+    @ColumnInfo(defaultValue = DEFAULT_DNS_NAME)
+    val dnsName: String = DEFAULT_DNS_NAME,
+    @ColumnInfo(defaultValue = DEFAULT_TCP_HOST)
+    val tcpHost: String = DEFAULT_TCP_HOST,
+    @ColumnInfo(defaultValue = DEFAULT_TCP_PORT.toString())
+    val tcpPort: Int = DEFAULT_TCP_PORT,
+    @ColumnInfo(defaultValue = DEFAULT_DOWNLOAD_URL)
+    val downloadUrl: String = DEFAULT_DOWNLOAD_URL
 )
 
 @Entity(
@@ -114,7 +147,13 @@ data class Sample(
     val pingHost: String? = null,
     val rttAvgMs: Double? = null,
     val rttJitterMs: Double? = null,
-    val rttLossPct: Double? = null
+    val rttLossPct: Double? = null,
+    // DNS, TCP and load-test probes, one row per attempt
+    val probeMs: Double? = null,
+    val probeOk: Boolean? = null,
+    val bytes: Long? = null,
+    val durationMs: Long? = null,
+    val target: String? = null
 )
 
 @Entity(
