@@ -104,7 +104,7 @@ fun HeatmapPane(
             modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s),
             verticalArrangement = Arrangement.spacedBy(Spacing.s)
         ) {
-            MetricChips(vm)
+            MetricChips(vm.metric) { vm.metric = it }
             if (metric.band == Band.WIFI) BssidDropdown(vm, bssids, connected)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -156,7 +156,7 @@ fun HeatmapPane(
 }
 
 @Composable
-private fun MetricChips(vm: SurveyViewModel) {
+fun MetricChips(selectedMetric: Metric, onSelect: (Metric) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -172,10 +172,10 @@ private fun MetricChips(vm: SurveyViewModel) {
                 modifier = Modifier.padding(start = if (band == Band.WIFI) Spacing.xs else Spacing.m)
             )
             Metric.entries.filter { it.band == band }.forEach { m ->
-                val selected = vm.metric == m
+                val selected = selectedMetric == m
                 FilterChip(
                     selected = selected,
-                    onClick = { vm.metric = m },
+                    onClick = { onSelect(m) },
                     label = { Text(shortLabel(m)) },
                     leadingIcon = if (selected) {
                         { Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(FilterChipDefaults.IconSize)) }

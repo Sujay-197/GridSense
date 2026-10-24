@@ -141,6 +141,24 @@ fun qualityRampColor(q: Double): Color {
 fun qualityRampArgb(q: Double, alpha: Int = 255): Int =
     qualityRampColor(q).copy(alpha = alpha / 255f).toArgb()
 
+/**
+ * Diverging scale for difference maps: orange for worse in B, blue for better, a neutral grey at
+ * zero. Blue and orange stay distinct for the common forms of colour blindness.
+ */
+object DiffColors {
+    val worse = Color(0xFFD95F02)
+    val neutral = Color(0xFFE6E6E6)
+    val better = Color(0xFF2166AC)
+}
+
+/** [t] from -1 (much worse in B) through 0 to 1 (much better in B). */
+fun diffColor(t: Double): Color {
+    val c = t.coerceIn(-1.0, 1.0).toFloat()
+    return if (c < 0) lerp(DiffColors.neutral, DiffColors.worse, -c) else lerp(DiffColors.neutral, DiffColors.better, c)
+}
+
+fun diffArgb(t: Double, alpha: Int = 255): Int = diffColor(t).copy(alpha = alpha / 255f).toArgb()
+
 // --- plan drawing ------------------------------------------------------------------------
 
 /** Colours for the room plan, grid and heatmap canvases. */

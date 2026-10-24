@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -87,6 +88,7 @@ fun SurveyScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
+    onCompare: (Long) -> Unit,
     onFixPermissions: () -> Unit
 ) {
     LaunchedEffect(roomId) { vm.openRoom(roomId) }
@@ -107,6 +109,8 @@ fun SurveyScreen(
     var exportMenu by remember { mutableStateOf(false) }
     var overflowMenu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var pickCompare by remember { mutableStateOf(false) }
+    val rooms by vm.rooms.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState()
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
@@ -178,6 +182,10 @@ fun SurveyScreen(
                     MenuItem("Duplicate", Icons.Filled.ContentCopy) {
                         overflowMenu = false
                         onDuplicate()
+                    }
+                    MenuItem("Compare with…", Icons.AutoMirrored.Filled.CompareArrows) {
+                        overflowMenu = false
+                        pickCompare = true
                     }
                     MenuItem("Delete survey", Icons.Filled.Delete) {
                         overflowMenu = false
@@ -262,6 +270,18 @@ fun SurveyScreen(
     }
 
     if (vm.routerDialogOpen) RouterDialog(vm)
+
+    if (pickCompare && currentRoom != null) {
+        ComparePicker(
+            rooms = rooms,
+            fixedA = currentRoom,
+            onPicked = { _, b ->
+                pickCompare = false
+                onCompare(b)
+            },
+            onDismiss = { pickCompare = false }
+        )
+    }
 
     if (confirmDelete && currentRoom != null) {
         ConfirmDialog(

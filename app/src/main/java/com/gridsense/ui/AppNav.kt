@@ -23,10 +23,12 @@ object Routes {
     const val PERMISSIONS = "permissions"
     const val SETUP = "setup?editId={editId}&copyOf={copyOf}"
     const val SURVEY = "survey/{id}"
+    const val COMPARE = "compare/{a}/{b}"
 
     fun setup(editId: Long? = null) = if (editId == null) "setup" else "setup?editId=$editId"
     fun duplicate(id: Long) = "setup?copyOf=$id"
     fun survey(id: Long) = "survey/$id"
+    fun compare(a: Long, b: Long) = "compare/$a/$b"
 }
 
 /** Leaves the permission screen: back where it was opened from, or on to Home at first launch. */
@@ -79,6 +81,7 @@ fun AppNav() {
                 onNew = { nav.navigate(Routes.setup()) },
                 onOpen = { nav.navigate(Routes.survey(it)) },
                 onDuplicate = { nav.navigate(Routes.duplicate(it)) },
+                onCompare = { a, b -> nav.navigate(Routes.compare(a, b)) },
                 onPermissions = { nav.navigate(Routes.PERMISSIONS) }
             )
         }
@@ -103,6 +106,16 @@ fun AppNav() {
             )
         }
         composable(
+            Routes.COMPARE,
+            arguments = listOf(
+                navArgument("a") { type = NavType.LongType },
+                navArgument("b") { type = NavType.LongType }
+            )
+        ) {
+            val compareVm: CompareViewModel = viewModel()
+            CompareScreen(compareVm, onBack = { nav.popBackStack() })
+        }
+        composable(
             Routes.SURVEY,
             arguments = listOf(navArgument("id") { type = NavType.LongType })
         ) { entry ->
@@ -113,6 +126,7 @@ fun AppNav() {
                 onBack = { nav.popBackStack() },
                 onEdit = { nav.navigate(Routes.setup(id)) },
                 onDuplicate = { nav.navigate(Routes.duplicate(id)) },
+                onCompare = { b -> nav.navigate(Routes.compare(id, b)) },
                 onFixPermissions = { nav.navigate(Routes.PERMISSIONS) }
             )
         }

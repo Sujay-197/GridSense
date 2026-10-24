@@ -31,7 +31,10 @@ readings into a heatmap. No floor plan, GPS or location fix is needed.
    neighbour scans: an occupancy chart per band with your own networks highlighted, and a
    channel recommendation that only suggests a change when it is at least 3 dB quieter. The
    router dialog asks how far the router sits above the phone, for 3D distances.
-6. **Report.** A plain-language write-up of the survey, explained in [the next section](#the-report).
+6. **Compare.** Pick two surveys on the same grid (from Home, or *Compare with…* on a survey)
+   for a difference map, a summary and a node-by-node table. *Duplicate* starts a new survey
+   on the same grid, with a *condition* such as "door closed", for controlled experiments.
+7. **Report.** A plain-language write-up of the survey, explained in [the next section](#the-report).
 
 ## The report
 

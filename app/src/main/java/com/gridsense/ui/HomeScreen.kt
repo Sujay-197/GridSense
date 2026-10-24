@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.Delete
@@ -58,6 +59,7 @@ fun HomeScreen(
     onNew: () -> Unit,
     onOpen: (Long) -> Unit,
     onDuplicate: (Long) -> Unit,
+    onCompare: (Long, Long) -> Unit,
     onPermissions: () -> Unit
 ) {
     val rooms by vm.rooms.collectAsStateWithLifecycle()
@@ -65,10 +67,18 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingDelete by remember { mutableStateOf<SurveyRoom?>(null) }
+    var comparing by remember { mutableStateOf(false) }
+    /** Set when "Compare with…" came from a card; null means pick both surveys. */
+    var compareFrom by remember { mutableStateOf<SurveyRoom?>(null) }
 
     ScreenScaffold(
         title = "GridSense",
         actions = {
+            if (rooms.size >= 2) {
+                IconButton(onClick = { compareFrom = null; comparing = true }) {
+                    Icon(Icons.AutoMirrored.Filled.CompareArrows, contentDescription = "Compare two surveys")
+                }
+            }
             IconButton(onClick = onPermissions) {
                 Icon(Icons.Filled.VerifiedUser, contentDescription = "Permissions and readiness")
             }
@@ -103,6 +113,7 @@ fun HomeScreen(
                         summary = summaries[room.id],
                         onOpen = { onOpen(room.id) },
                         onDuplicate = { onDuplicate(room.id) },
+                        onCompare = { compareFrom = room; comparing = true },
                         onExportCsv = { scope.launch { share(context, vm.exportCsv(room.id), "text/csv") } },
                         onExportJson = {
                             scope.launch { vm.exportJson(room.id)?.let { share(context, listOf(it), "application/json") } }
@@ -112,6 +123,18 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (comparing) {
+        ComparePicker(
+            rooms = rooms,
+            fixedA = compareFrom,
+            onPicked = { a, b ->
+                comparing = false
+                onCompare(a, b)
+            },
+            onDismiss = { comparing = false }
+        )
     }
 
     val target = pendingDelete
@@ -137,6 +160,7 @@ private fun SurveyCard(
     summary: SurveySummary?,
     onOpen: () -> Unit,
     onDuplicate: () -> Unit,
+    onCompare: () -> Unit,
     onExportCsv: () -> Unit,
     onExportJson: () -> Unit,
     onDelete: () -> Unit
@@ -172,6 +196,10 @@ private fun SurveyCard(
                         MenuItem("Duplicate", Icons.Filled.ContentCopy) {
                             menu = false
                             onDuplicate()
+                        }
+                        MenuItem("Compare with…", Icons.AutoMirrored.Filled.CompareArrows) {
+                            menu = false
+                            onCompare()
                         }
                         MenuItem("Export CSV", Icons.Filled.TableChart) {
                             menu = false

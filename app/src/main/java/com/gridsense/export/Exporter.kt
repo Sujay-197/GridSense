@@ -30,11 +30,17 @@ fun baseName(room: SurveyRoom): String {
     return safe + "_" + stamp
 }
 
-fun writePng(context: Context, image: ImageBitmap, base: String): File {
-    val file = File(exportsDir(context), base + "_heatmap.png")
+fun writePng(context: Context, image: ImageBitmap, base: String, suffix: String = "_heatmap"): File {
+    val file = File(exportsDir(context), base + suffix + ".png")
     file.outputStream().use { out ->
         image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, out)
     }
+    return file
+}
+
+fun writeText(context: Context, name: String, text: String): File {
+    val file = File(exportsDir(context), name)
+    file.writeText(text)
     return file
 }
 
