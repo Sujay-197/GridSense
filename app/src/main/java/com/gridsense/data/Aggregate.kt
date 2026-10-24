@@ -39,7 +39,7 @@ fun pointValue(samples: List<Sample>, metric: Metric, bssidFilter: String?): Dou
                 Metric.LATENCY -> ping?.rttAvgMs
                 Metric.JITTER -> ping?.rttJitterMs
                 Metric.LOSS -> ping?.rttLossPct
-                else -> null
+                else -> latencyValue(samples, metric)
             }
         }
     }

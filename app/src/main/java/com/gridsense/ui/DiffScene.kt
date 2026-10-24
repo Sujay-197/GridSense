@@ -57,7 +57,7 @@ fun buildDiffScene(title: String, polygon: List<Pt>, deltas: List<NodeDelta>, me
 private const val LEGEND_HEIGHT = 64f
 
 private fun signed(v: Double, metric: Metric): String {
-    val s = if (metric == Metric.LATENCY || metric == Metric.JITTER) String.format("%.1f", abs(v)) else abs(v).roundToInt().toString()
+    val s = metric.format(abs(v))
     return (if (v > 0) "+" else if (v < 0) "−" else "±") + s
 }
 

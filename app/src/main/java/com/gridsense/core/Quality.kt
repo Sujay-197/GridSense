@@ -15,12 +15,16 @@ enum class QualityLevel(val word: String) {
 
 /**
  * One band of a metric's scale. For a higher-is-better metric a value at or above [limit] earns
- * [level]; for a lower-is-better one a value at or below it does. The last band of every scale
- * has an infinite limit, so every value lands somewhere.
+ * [level]; for a lower-is-better one a value at or below it does. With [inclusive] false the
+ * limit itself falls in the next band ("below 5 ms" rather than "up to 5 ms"). The last band of
+ * every scale has an infinite limit, so every value lands somewhere.
  */
-data class QualityBand(val level: QualityLevel, val limit: Double)
+data class QualityBand(val level: QualityLevel, val limit: Double, val inclusive: Boolean = true)
 
 private fun bands(vararg pairs: Pair<QualityLevel, Double>) = pairs.map { QualityBand(it.first, it.second) }
+
+private fun strictBands(vararg pairs: Pair<QualityLevel, Double>) =
+    pairs.map { QualityBand(it.first, it.second, inclusive = false) }
 
 private val NEG = Double.NEGATIVE_INFINITY
 private val POS = Double.POSITIVE_INFINITY
@@ -68,12 +72,47 @@ fun qualityBands(metric: Metric): List<QualityBand> = when (metric) {
         QualityLevel.FAIR to 1.0,
         QualityLevel.POOR to POS
     )
+    // A lookup from a nearby resolver is tens of ms; past 150 ms pages feel slow to start.
+    Metric.DNS -> bands(
+        QualityLevel.GOOD to 50.0,
+        QualityLevel.FAIR to 150.0,
+        QualityLevel.POOR to POS
+    )
+    // About one round trip to a public anycast host.
+    Metric.TCP_CONNECT -> bands(
+        QualityLevel.GOOD to 50.0,
+        QualityLevel.FAIR to 150.0,
+        QualityLevel.POOR to POS
+    )
+    Metric.LOADED_LATENCY -> bands(
+        QualityLevel.GOOD to 50.0,
+        QualityLevel.FAIR to 100.0,
+        QualityLevel.POOR to POS
+    )
+    // Waveform-style bufferbloat grades: below 5 ms excellent, below 30 good, below 60 fair.
+    Metric.BUFFERBLOAT -> strictBands(
+        QualityLevel.EXCELLENT to 5.0,
+        QualityLevel.GOOD to 30.0,
+        QualityLevel.FAIR to 60.0,
+        QualityLevel.POOR to POS
+    )
+    Metric.DOWNLOAD -> bands(
+        QualityLevel.EXCELLENT to 100.0,
+        QualityLevel.GOOD to 25.0,
+        QualityLevel.FAIR to 5.0,
+        QualityLevel.POOR to NEG
+    )
 }
 
 fun qualityLevel(metric: Metric, value: Double): QualityLevel {
     val scale = qualityBands(metric)
     val hit = scale.firstOrNull { band ->
-        if (metric.higherIsBetter) value >= band.limit else value <= band.limit
+        when {
+            metric.higherIsBetter && band.inclusive -> value >= band.limit
+            metric.higherIsBetter -> value > band.limit
+            band.inclusive -> value <= band.limit
+            else -> value < band.limit
+        }
     }
     return (hit ?: scale.last()).level
 }
@@ -88,11 +127,13 @@ private fun plain(value: Double): String =
 fun bandLabels(metric: Metric): List<Pair<QualityLevel, String>> {
     val scale = qualityBands(metric)
     return scale.mapIndexed { i, band ->
-        val previous = scale.getOrNull(i - 1)?.limit
+        val prevBand = scale.getOrNull(i - 1)
+        val previous = prevBand?.limit
         val text = when {
-            previous == null && metric.higherIsBetter -> "≥ " + plain(band.limit)
-            previous == null -> "≤ " + plain(band.limit)
-            band.limit.isInfinite() -> (if (metric.higherIsBetter) "< " else "> ") + plain(previous)
+            previous == null && metric.higherIsBetter -> (if (band.inclusive) "≥ " else "> ") + plain(band.limit)
+            previous == null -> (if (band.inclusive) "≤ " else "< ") + plain(band.limit)
+            band.limit.isInfinite() && metric.higherIsBetter -> (if (prevBand.inclusive) "< " else "≤ ") + plain(previous)
+            band.limit.isInfinite() -> (if (prevBand.inclusive) "> " else "≥ ") + plain(previous)
             metric.higherIsBetter -> plain(band.limit) + " to " + plain(previous)
             else -> plain(previous) + " to " + plain(band.limit)
         }

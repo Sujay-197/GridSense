@@ -233,8 +233,4 @@ fun renderScene(
     return image
 }
 
-fun formatValue(value: Double, metric: Metric): String = when (metric) {
-    Metric.LATENCY, Metric.JITTER -> String.format("%.1f %s", value, metric.unit)
-    Metric.LOSS -> String.format("%.0f %s", value, metric.unit)
-    else -> value.roundToInt().toString() + " " + metric.unit
-}
+fun formatValue(value: Double, metric: Metric): String = metric.format(value) + " " + metric.unit

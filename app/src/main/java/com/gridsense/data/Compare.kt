@@ -9,12 +9,15 @@ import kotlin.math.sqrt
  * The smallest per-node change counted as "changed". RSSI and RSRP use 3 dB, a halving or
  * doubling of power. RSRQ moves over a narrower range, so 2 dB. Latency and jitter use 5 ms,
  * about what a gateway ping wanders by on its own. With ping -c 10 one lost reply is 10 %.
+ * DNS, TCP and loaded latency go beyond the first hop and vary more, so 10 ms; download 5 Mbps.
  */
 fun changeThreshold(metric: Metric): Double = when (metric) {
     Metric.RSSI, Metric.CELL_DBM, Metric.CELL_RSRP, Metric.CELL_SINR -> 3.0
     Metric.CELL_RSRQ -> 2.0
     Metric.LATENCY, Metric.JITTER -> 5.0
     Metric.LOSS -> 10.0
+    Metric.DNS, Metric.TCP_CONNECT, Metric.LOADED_LATENCY, Metric.BUFFERBLOAT -> 10.0
+    Metric.DOWNLOAD -> 5.0
 }
 
 /** Why two surveys can't be compared, or null when they can. */

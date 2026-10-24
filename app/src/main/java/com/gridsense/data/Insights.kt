@@ -469,7 +469,9 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
             "Every ping to ${hosts.joinToString(", ")} went unanswered. Some routers and networks " +
                 "block ping; try setting a different ping target, such as 8.8.8.8."
         }
-        return InsightSection("Latency, jitter and loss", lines)
+        val ratings = ArrayList<Rating>()
+        beyondPing(logged, byPoint, lines, ratings)
+        return InsightSection("Latency, jitter and loss", lines, ratings)
     }
 
     val ratings = ArrayList<Rating>()
@@ -505,7 +507,119 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
         "Packet loss at ${lossy.size} node${if (lossy.size == 1) "" else "s"}: " +
             lossy.entries.joinToString(", ") { "${labelOf(it.key)} ${num(it.value.rttLossPct!!)}%" } + "."
     }
+    beyondPing(logged, byPoint, lines, ratings)
     return InsightSection("Latency, jitter and loss", lines, ratings)
+}
+
+/** DNS, TCP and load-test findings, appended to the latency section. */
+private fun beyondPing(
+    logged: List<GridPoint>,
+    byPoint: Map<Long, List<Sample>>,
+    lines: MutableList<String>,
+    ratings: MutableList<Rating>
+) {
+    val rows = logged.flatMap { byPoint[it.id].orEmpty() }
+    val nodes = logged.associateWith { nodeLatency(byPoint[it.id].orEmpty()) }
+
+    val dns = nodes.filterValues { it.dns != null }.mapValues { it.value.dns!! }
+    if (dns.isNotEmpty()) {
+        val name = rows.firstOrNull { it.kind == KIND_DNS }?.target ?: "the test name"
+        val tried = dns.values.sumOf { it.attempts }
+        val failed = dns.values.sumOf { it.failed }
+        val medians = dns.filterValues { it.medianMs != null }.mapValues { it.value.medianMs!! }
+        lines += if (medians.isEmpty()) {
+            "Every DNS lookup of $name failed ($tried of $tried), so names could not be resolved " +
+                "even though ping worked; check the network's DNS server."
+        } else {
+            val m = median(medians.values.toList())
+            val worst = medians.maxByOrNull { it.value }!!
+            ratings += Rating("Median DNS lookup", "${num(round1(m))} ms", qualityLevel(Metric.DNS, m))
+            "DNS lookups of $name took a median ${num(round1(m))} ms, slowest at ${labelOf(worst.key)} " +
+                "(${num(round1(worst.value))} ms), bypassing the phone's cache. " +
+                if (failed == 0) "All $tried lookups were answered."
+                else "$failed of $tried lookups failed, which shows as pages that sometimes hang before loading."
+        }
+    }
+
+    val tcp = nodes.filterValues { it.tcp != null }
+    if (tcp.isNotEmpty()) {
+        val host = rows.firstOrNull { it.kind == KIND_TCP }?.target ?: "the test host"
+        val tried = tcp.values.sumOf { it.tcp!!.attempts }
+        val failed = tcp.values.sumOf { it.tcp!!.failed }
+        val connect = tcp.values.mapNotNull { it.tcp!!.medianMs }
+        if (connect.isEmpty()) {
+            lines += "Every TCP connection to $host failed ($tried attempts); the host or port may be blocked."
+        } else {
+            val m = median(connect)
+            ratings += Rating("Median TCP connect", "${num(round1(m))} ms", qualityLevel(Metric.TCP_CONNECT, m))
+            val icmp = tcp.values.mapNotNull { it.idleMs }
+            var line = "TCP connect to $host took a median ${num(round1(m))} ms"
+            if (icmp.isNotEmpty()) {
+                val i = median(icmp)
+                line += ", against ${num(round1(i))} ms for ping. A handshake costs about one round trip, " +
+                    if (m > i + 5) "so the extra ${num(round1(m - i))} ms is the path beyond the ping target."
+                    else "and the two agree, so the ping target is representative of the wider path."
+            } else {
+                line += "."
+            }
+            if (failed > 0) line += " $failed of $tried attempts failed."
+            lines += line
+        }
+    }
+
+    val loaded = nodes.filterValues { it.loadTested }
+    if (loaded.isEmpty()) {
+        if (dns.isNotEmpty() || tcp.isNotEmpty()) {
+            lines += "No load test was run (it is off by default to save data, and skipped on mobile " +
+                "data unless confirmed), so bufferbloat and throughput were not measured."
+        }
+        return
+    }
+    if (loaded.size < logged.size) {
+        lines += "The load test ran at ${loaded.size} of ${logged.size} nodes."
+    }
+    val failedDownloads = loaded.filterValues { !it.downloadOk }.keys
+    if (failedDownloads.size == loaded.size) {
+        lines += "The load-test download failed at every node where it ran, so bufferbloat and " +
+            "throughput are unknown. The download URL may have moved; it can be changed in Edit details."
+        return
+    }
+    if (failedDownloads.isNotEmpty()) {
+        lines += "The load-test download failed at ${joinLabels(failedDownloads.sortedBy { it.seq })}."
+    }
+    val bloat = loaded.values.mapNotNull { it.bufferbloatMs }
+    val loadedRtt = loaded.values.mapNotNull { it.loadedMedianMs }
+    val idle = loaded.values.mapNotNull { it.idleMs }
+    if (bloat.isNotEmpty() && loadedRtt.isNotEmpty() && idle.isNotEmpty()) {
+        val b = median(bloat)
+        val grade = bufferbloatGrade(b)
+        ratings += Rating("Bufferbloat", "${num(round1(b))} ms", grade)
+        lines += "Under load, latency rose from ${num(round1(median(idle)))} ms idle to " +
+            "${num(round1(median(loadedRtt)))} ms: bufferbloat ${num(round1(b))} ms, grade ${grade.word} " +
+            "(Waveform-style grades: below 5 ms excellent, below 30 ms good, below 60 ms fair). " +
+            when (grade) {
+                QualityLevel.EXCELLENT, QualityLevel.VERY_GOOD, QualityLevel.GOOD -> "Calls and games will hold up while something downloads."
+                QualityLevel.FAIR -> "Calls may stutter while something else downloads."
+                else -> "A download on this network will make calls and games lag badly; a router with SQM or smart queueing fixes this."
+            }
+    } else if (loaded.values.all { it.loadedReplies == 0 }) {
+        lines += "No ping replies came back during the load test, so bufferbloat could not be measured."
+    }
+    val goodput = loaded.values.mapNotNull { it.goodputMbps }
+    if (goodput.isNotEmpty()) {
+        val g = median(goodput)
+        ratings += Rating("Download goodput", "${num(round1(g))} Mbps", qualityLevel(Metric.DOWNLOAD, g))
+        val speeds = loaded.keys.flatMap { p -> byPoint[p.id].orEmpty() }
+            .filter { it.kind == KIND_LINK }.mapNotNull { it.linkSpeedMbps?.toDouble() }
+        lines += "Download goodput was a median ${num(round1(g))} Mbps" +
+            if (speeds.isEmpty()) "." else {
+                val link = median(speeds)
+                " against a reported Wi-Fi link speed of ${num(link)} Mbps. Link speed is the radio's " +
+                    "signalling rate, not throughput: protocol overhead, sharing the air and the " +
+                    "internet connection itself all sit between the two" +
+                    (if (g < link) ", here ${Math.round(100 * g / link)} % of it." else ".")
+            }
+    }
 }
 
 private fun dataQuality(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): InsightSection? {

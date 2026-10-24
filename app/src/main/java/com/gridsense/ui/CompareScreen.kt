@@ -70,8 +70,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** One more decimal than the metric's own, since means and SDs are finer than readings. */
 private fun fmt(v: Double, metric: Metric): String =
-    if (metric == Metric.LATENCY || metric == Metric.JITTER) String.format("%.1f", v) else String.format("%.1f", v).removeSuffix(".0")
+    String.format(java.util.Locale.US, "%.${metric.decimals + 1}f", v)
 
 private fun signedFmt(v: Double, metric: Metric) = (if (v > 0) "+" else "") + fmt(v, metric)
 

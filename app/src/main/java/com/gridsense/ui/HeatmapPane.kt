@@ -66,6 +66,9 @@ private fun shortLabel(metric: Metric) = when (metric) {
     Metric.CELL_RSRP -> "RSRP"
     Metric.CELL_RSRQ -> "RSRQ"
     Metric.CELL_SINR -> "SINR"
+    Metric.LATENCY -> "Ping"
+    Metric.TCP_CONNECT -> "TCP"
+    Metric.LOADED_LATENCY -> "Loaded"
     else -> metric.label
 }
 
