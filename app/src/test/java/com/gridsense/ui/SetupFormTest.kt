@@ -49,4 +49,24 @@ class SetupFormTest {
         assertEquals("Bedroom (3)", duplicateName("Bedroom", listOf("Bedroom", "Bedroom (2)")))
         assertEquals("Bedroom (3)", duplicateName("Bedroom (2)", listOf("Bedroom", "Bedroom (2)")))
     }
+
+    @Test
+    fun latencyTestDefaults() {
+        val f = SetupForm()
+        assertTrue(f.extendedTests)
+        assertFalse(f.loadTest)
+        assertEquals("example.com", f.dnsName)
+        assertEquals("1.1.1.1", f.tcpHost)
+        assertEquals("443", f.tcpPort)
+        assertEquals("https://speed.cloudflare.com/__down?bytes=20000000", f.downloadUrl)
+    }
+
+    @Test
+    fun latencyTestFieldsAreValidatedOnlyWhenTheirTestIsOn() {
+        assertEquals("TCP port: Use 1 to 65535", valid.copy(tcpPort = "70000").blocker)
+        assertNull(valid.copy(extendedTests = false, tcpPort = "70000", dnsName = "").blocker)
+        assertEquals("DNS name: Enter a name to look up", valid.copy(dnsName = " ").blocker)
+        assertNull(valid.copy(downloadUrl = "ftp://x").blocker)
+        assertEquals("Download URL: Enter an http or https URL", valid.copy(loadTest = true, downloadUrl = "ftp://x").blocker)
+    }
 }

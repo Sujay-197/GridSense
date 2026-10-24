@@ -32,7 +32,23 @@ import com.gridsense.export.writeJson
 import com.gridsense.net.Neighbour
 import com.gridsense.net.NeighbourScanner
 import com.gridsense.net.ScanOutcome
+import com.gridsense.net.ProbeResult
+import com.gridsense.net.Transport
+import com.gridsense.net.activeTransport
+import com.gridsense.net.dnsLookup
+import com.gridsense.net.loadTest
 import com.gridsense.net.ping
+import com.gridsense.net.tcpConnect
+import com.gridsense.core.median
+import com.gridsense.data.KIND_DNS
+import com.gridsense.data.KIND_DOWNLOAD
+import com.gridsense.data.KIND_LOADED_PING
+import com.gridsense.data.KIND_TCP
+import com.gridsense.data.LOAD_TEST_MAX_MS
+import com.gridsense.data.PROBE_ATTEMPTS
+import com.gridsense.data.dataUsePerNode
+import com.gridsense.data.downloadCapBytes
+import com.gridsense.data.goodputMbps
 import com.gridsense.net.pingTarget
 import com.gridsense.net.readCell
 import com.gridsense.net.readLink
@@ -63,6 +79,9 @@ private const val POLL_INTERVAL_MS = 500L
 private const val STAGE_RADIOS = "Sampling radios"
 private const val STAGE_PING = "Ping"
 private const val STAGE_SCAN = "Neighbour scan"
+private const val STAGE_DNS = "DNS lookups"
+private const val STAGE_TCP = "TCP connects"
+private const val STAGE_LOAD = "Load test"
 
 /**
  * Survey data shared by Home and the survey screen. Navigation lives in the NavHost; this
@@ -96,6 +115,24 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var loggingJob: Job? = null
+
+    /** A node waiting on the user's answer to running the load test over mobile data. */
+    var cellularLoadPrompt by mutableStateOf<GridPoint?>(null)
+        private set
+
+    /** The answer, kept for the rest of the session: null until asked. */
+    private var loadOnCellular: Boolean? = null
+
+    fun answerCellularLoad(run: Boolean) {
+        loadOnCellular = run
+        val point = cellularLoadPrompt ?: return
+        cellularLoadPrompt = null
+        startLogging(point)
+    }
+
+    fun dismissCellularLoad() {
+        cellularLoadPrompt = null
+    }
 
     // --- router placement --------------------------------------------------
 
@@ -208,6 +245,29 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Runs [PROBE_ATTEMPTS] attempts as one stage; a failed attempt is recorded, not fatal. */
+    private suspend fun runProbes(name: String, target: String, attempt: suspend () -> ProbeResult): List<ProbeResult> {
+        val results = ArrayList<ProbeResult>()
+        stage(name) {
+            repeat(PROBE_ATTEMPTS) { i ->
+                results += attempt()
+                setStage(name, StageStatus.RUNNING, (i + 1f) / PROBE_ATTEMPTS, target)
+            }
+            val ok = results.filter { it.ok }.mapNotNull { it.ms }
+            setStage(
+                name,
+                if (ok.isEmpty()) StageStatus.FAILED else StageStatus.DONE,
+                detail = if (ok.isEmpty()) "All $PROBE_ATTEMPTS failed: " + (results.lastOrNull()?.error ?: target)
+                else String.format("%s, median %.1f ms, %d of %d ok", target, median(ok), ok.size, results.size)
+            )
+        }
+        return results
+    }
+
+    private fun ProbeResult.toSample(pointId: Long, kind: String, target: String) = Sample(
+        pointId = pointId, ts = System.currentTimeMillis(), kind = kind, probeMs = ms, probeOk = ok, target = target
+    )
+
     fun startLogging(point: GridPoint) {
         if (loggingJob?.isActive == true) return
         val currentRoom = room.value ?: return
@@ -216,10 +276,17 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
             say("Neither the Wi-Fi identifiers nor the serving cell are readable, so logging is blocked.")
             return
         }
+        val onCellular = activeTransport(getApplication()) == Transport.CELLULAR
+        if (currentRoom.loadTest && onCellular && loadOnCellular == null) {
+            cellularLoadPrompt = point
+            return
+        }
+        val runLoad = currentRoom.loadTest && (!onCellular || loadOnCellular == true)
         loggingJob = viewModelScope.launch {
             val app = getApplication<Application>()
             loggingPointId = point.id
-            stages = listOf(STAGE_RADIOS, STAGE_PING, STAGE_SCAN).map { Stage(it, StageStatus.PENDING) }
+            stages = listOf(STAGE_RADIOS, STAGE_PING, STAGE_SCAN, STAGE_DNS, STAGE_TCP, STAGE_LOAD)
+                .map { Stage(it, StageStatus.PENDING) }
             dao.deleteSamplesOf(point.id)
             dao.setStatus(point.id, STATUS_LOGGING)
 
@@ -336,6 +403,48 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
                             wifiStandard = it.wifiStandard
                         )
                     }
+                )
+            }
+
+            // After the radios and the idle ping, so these probes don't disturb either.
+            if (currentRoom.extendedTests) {
+                runProbes(STAGE_DNS, currentRoom.dnsName) { dnsLookup(app, currentRoom.dnsName) }
+                    .let { dao.insertSamples(it.map { r -> r.toSample(point.id, KIND_DNS, currentRoom.dnsName) }) }
+                val tcpTarget = currentRoom.tcpHost + ":" + currentRoom.tcpPort
+                runProbes(STAGE_TCP, tcpTarget) { tcpConnect(currentRoom.tcpHost, currentRoom.tcpPort) }
+                    .let { dao.insertSamples(it.map { r -> r.toSample(point.id, KIND_TCP, tcpTarget) }) }
+            } else {
+                setStage(STAGE_DNS, StageStatus.SKIPPED, detail = "Extended tests are off for this survey")
+                setStage(STAGE_TCP, StageStatus.SKIPPED, detail = "Extended tests are off for this survey")
+            }
+
+            if (runLoad) {
+                stage(STAGE_LOAD) {
+                    val url = currentRoom.downloadUrl
+                    val result = loadTest(url, downloadCapBytes(url), LOAD_TEST_MAX_MS, host) { p ->
+                        setStage(STAGE_LOAD, StageStatus.RUNNING, p, dataUsePerNode(url))
+                    }
+                    val now = System.currentTimeMillis()
+                    dao.insertSamples(
+                        result.rtts.map {
+                            Sample(pointId = point.id, ts = now, kind = KIND_LOADED_PING, probeMs = it, probeOk = true, target = host)
+                        } + Sample(
+                            pointId = point.id, ts = now, kind = KIND_DOWNLOAD, bytes = result.bytes,
+                            durationMs = result.durationMs, probeOk = result.ok, target = url
+                        )
+                    )
+                    val mbps = goodputMbps(result.bytes, result.durationMs)
+                    setStage(
+                        STAGE_LOAD,
+                        if (result.ok) StageStatus.DONE else StageStatus.FAILED,
+                        detail = if (result.ok && mbps != null) String.format("%.1f Mbps, %d pings", mbps, result.rtts.size)
+                        else result.error ?: "Download failed"
+                    )
+                }
+            } else {
+                setStage(
+                    STAGE_LOAD, StageStatus.SKIPPED,
+                    detail = if (currentRoom.loadTest) "Skipped on mobile data" else "Off for this survey"
                 )
             }
 

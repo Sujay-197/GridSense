@@ -10,6 +10,10 @@ import androidx.lifecycle.viewModelScope
 import com.gridsense.core.SurveyMode
 import com.gridsense.core.gridNodes
 import com.gridsense.core.gridOutline
+import com.gridsense.data.DEFAULT_DNS_NAME
+import com.gridsense.data.DEFAULT_DOWNLOAD_URL
+import com.gridsense.data.DEFAULT_TCP_HOST
+import com.gridsense.data.DEFAULT_TCP_PORT
 import com.gridsense.data.Db
 import com.gridsense.data.GridPoint
 import com.gridsense.data.STATUS_PENDING
@@ -36,8 +40,23 @@ data class SetupForm(
     val samples: String = "10",
     val rows: String = "4",
     val cols: String = "4",
-    val cell: String = "1.0"
+    val cell: String = "1.0",
+    val extendedTests: Boolean = true,
+    val loadTest: Boolean = false,
+    val dnsName: String = DEFAULT_DNS_NAME,
+    val tcpHost: String = DEFAULT_TCP_HOST,
+    val tcpPort: String = DEFAULT_TCP_PORT.toString(),
+    val downloadUrl: String = DEFAULT_DOWNLOAD_URL
 ) {
+    val tcpPortValue get() = tcpPort.toIntOrNull()
+
+    val dnsNameError get() = if (extendedTests && dnsName.isBlank()) "Enter a name to look up" else null
+    val tcpHostError get() = if (extendedTests && tcpHost.isBlank()) "Enter a host" else null
+    val tcpPortError get() = if (extendedTests && tcpPortValue !in 1..65535) "Use 1 to 65535" else null
+    val downloadUrlError
+        get() = if (loadTest && !downloadUrl.trim().let { it.startsWith("https://") || it.startsWith("http://") })
+            "Enter an http or https URL" else null
+
     val rowsValue get() = rows.toIntOrNull()
     val colsValue get() = cols.toIntOrNull()
     val cellValue get() = cell.toDoubleOrNull()
@@ -55,10 +74,22 @@ data class SetupForm(
     val blocker: String?
         get() = nameError ?: rowsError?.let { "Rows: $it" } ?: colsError?.let { "Columns: $it" }
             ?: cellError?.let { "Cell size: $it" } ?: samplesError?.let { "Samples: $it" }
+            ?: dnsNameError?.let { "DNS name: $it" } ?: tcpHostError?.let { "TCP host: $it" }
+            ?: tcpPortError?.let { "TCP port: $it" } ?: downloadUrlError?.let { "Download URL: $it" }
 
     private fun sideError(v: Int?) =
         if (v == null || v !in 1..MAX_CELLS_PER_SIDE) "Use 1 to $MAX_CELLS_PER_SIDE" else null
 }
+
+/** Copies the form's latency-test settings onto a survey. Only call with a valid form. */
+fun SurveyRoom.withTests(f: SetupForm) = copy(
+    extendedTests = f.extendedTests,
+    loadTest = f.loadTest,
+    dnsName = f.dnsName.trim().ifBlank { DEFAULT_DNS_NAME },
+    tcpHost = f.tcpHost.trim().ifBlank { DEFAULT_TCP_HOST },
+    tcpPort = f.tcpPortValue ?: DEFAULT_TCP_PORT,
+    downloadUrl = f.downloadUrl.trim().ifBlank { DEFAULT_DOWNLOAD_URL }
+)
 
 /**
  * The setup destination's own state. With an `editId` argument it edits that survey's details;
@@ -104,7 +135,13 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
                         samples = r.samplesPerPoint.toString(),
                         rows = r.gridRows.toString(),
                         cols = r.gridCols.toString(),
-                        cell = r.cellSizeM.toString()
+                        cell = r.cellSizeM.toString(),
+                        extendedTests = r.extendedTests,
+                        loadTest = r.loadTest,
+                        dnsName = r.dnsName,
+                        tcpHost = r.tcpHost,
+                        tcpPort = r.tcpPort.toString(),
+                        downloadUrl = r.downloadUrl
                     )
                     // A duplicate is new: leaving it unsaved should still ask first.
                     initial = if (editing) f else SetupForm()
@@ -133,7 +170,7 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
                         mode = f.mode.name,
                         samplesPerPoint = f.samplesValue!!,
                         pingHost = f.pingHost.trim().ifBlank { null }
-                    )
+                    ).withTests(f)
                 )
                 initial = f
                 onSaved(existing.id)
@@ -160,7 +197,7 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
                 gridCols = cols,
                 cellSizeM = cell,
                 createdAt = System.currentTimeMillis()
-            )
+            ).withTests(f)
         )
         dao.insertPoints(
             gridNodes(rows, cols, cell).mapIndexed { index, node ->

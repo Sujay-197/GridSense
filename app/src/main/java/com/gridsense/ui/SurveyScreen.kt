@@ -52,6 +52,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gridsense.data.STATUS_DONE
+import com.gridsense.data.dataUsePerNode
 import com.gridsense.data.decodePolygon
 import com.gridsense.export.baseName
 import com.gridsense.export.share
@@ -270,6 +271,25 @@ fun SurveyScreen(
     }
 
     if (vm.routerDialogOpen) RouterDialog(vm)
+
+    if (vm.cellularLoadPrompt != null && currentRoom != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { vm.dismissCellularLoad() },
+            title = { Text("Run the load test on mobile data?") },
+            text = {
+                Text(
+                    "You are on mobile data. The load test downloads " + dataUsePerNode(currentRoom.downloadUrl) +
+                        ". Your answer applies to every node until you leave the app."
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { vm.answerCellularLoad(true) }) { Text("Run on mobile data") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { vm.answerCellularLoad(false) }) { Text("Skip load test") }
+            }
+        )
+    }
 
     if (pickCompare && currentRoom != null) {
         ComparePicker(

@@ -29,8 +29,10 @@ readings into a heatmap. No floor plan, GPS or location fix is needed.
    shadowing σ, R²) on a log-distance scatter with a free-space reference, warning when too few
    nodes or too short a distance span make n unreliable; and channel congestion from the
    neighbour scans: an occupancy chart per band with your own networks highlighted, and a
-   channel recommendation that only suggests a change when it is at least 3 dB quieter. The
-   router dialog asks how far the router sits above the phone, for 3D distances.
+   channel recommendation that only suggests a change when it is at least 3 dB quieter; and
+   latency beyond ping: DNS lookup and TCP connect times, and an opt-in load test that measures
+   bufferbloat and download goodput. The router dialog asks how far the router sits above the
+   phone, for 3D distances.
 6. **Compare.** Pick two surveys on the same grid (from Home, or *Compare with…* on a survey)
    for a difference map, a summary and a node-by-node table. *Duplicate* starts a new survey
    on the same grid, with a *condition* such as "door closed", for controlled experiments.

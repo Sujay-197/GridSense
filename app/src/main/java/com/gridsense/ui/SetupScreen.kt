@@ -26,6 +26,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
+import com.gridsense.data.dataUsePerNode
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -191,10 +194,43 @@ fun SetupScreen(vm: SetupViewModel, onClose: () -> Unit, onSaved: (Long) -> Unit
                     label = { Text("Ping target (optional)") },
                     placeholder = { Text("Gateway on Wi-Fi, 8.8.8.8 on cellular") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     modifier = Modifier.fillMaxWidth()
                 )
+                SwitchRow(
+                    "Extended tests",
+                    "DNS lookup and TCP connect timing, 5 attempts each. Adds about 3 to 5 s per node.",
+                    form.extendedTests
+                ) { v -> vm.update { copy(extendedTests = v) } }
+                if (form.extendedTests) {
+                    TextSetting("DNS name", form.dnsName, form.dnsNameError) { v -> vm.update { copy(dnsName = v) } }
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
+                        TextSetting("TCP host", form.tcpHost, form.tcpHostError, Modifier.weight(2f)) { v ->
+                            vm.update { copy(tcpHost = v) }
+                        }
+                        TextSetting(
+                            "Port", form.tcpPort, form.tcpPortError, Modifier.weight(1f),
+                            keyboardType = KeyboardType.Number
+                        ) { v -> vm.update { copy(tcpPort = v) } }
+                    }
+                }
+                SwitchRow(
+                    "Load test",
+                    "Downloads while pinging to measure bufferbloat and throughput, for up to 8 s: " +
+                        dataUsePerNode(form.downloadUrl) + ". On mobile data it is skipped unless you confirm.",
+                    form.loadTest
+                ) { v -> vm.update { copy(loadTest = v) } }
+                if (form.loadTest) {
+                    TextSetting(
+                        "Download URL", form.downloadUrl, form.downloadUrlError,
+                        keyboardType = KeyboardType.Uri, last = true, onDone = { focus.clearFocus() }
+                    ) { v -> vm.update { copy(downloadUrl = v) } }
+                    Text(
+                        "The default is a third-party test endpoint that may change; replace it if downloads fail.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             val blocker = form.blocker
@@ -237,6 +273,48 @@ fun SetupScreen(vm: SetupViewModel, onClose: () -> Unit, onSaved: (Long) -> Unit
             onDismiss = { confirmDiscard = false }
         )
     }
+}
+
+@Composable
+private fun SwitchRow(title: String, body: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .toggleable(value = checked, onValueChange = onChange, role = Role.Switch),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.m)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+@Composable
+private fun TextSetting(
+    label: String,
+    value: String,
+    error: String?,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    keyboardType: KeyboardType = KeyboardType.Text,
+    last: Boolean = false,
+    onDone: () -> Unit = {},
+    onChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        singleLine = true,
+        isError = error != null,
+        supportingText = error?.let { { Text(it) } },
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = if (last) ImeAction.Done else ImeAction.Next),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        modifier = modifier
+    )
 }
 
 @Composable

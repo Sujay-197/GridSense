@@ -343,6 +343,10 @@ fun loggedNodes(points: List<GridPoint>) = points.filter { it.enabled && it.stat
 fun channelInsights(points: List<GridPoint>, samples: List<Sample>): InsightSection? =
     channels(loggedNodes(points), samples.groupBy { it.pointId })
 
+/** The report's latency section on its own, for the Analysis tab. */
+fun latencyInsights(points: List<GridPoint>, samples: List<Sample>): InsightSection? =
+    latency(loggedNodes(points), samples.groupBy { it.pointId })
+
 /** The caveat every channel finding carries. */
 const val CHANNEL_CAVEAT = "A phone scan is a snapshot of beacons: it shows how strong neighbours " +
     "are, not how busy they are. Real airtime use can't be measured without monitor mode."

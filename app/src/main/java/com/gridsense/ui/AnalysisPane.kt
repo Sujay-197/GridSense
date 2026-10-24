@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import com.gridsense.data.ChannelReport
 import com.gridsense.data.GridPoint
 import com.gridsense.data.Sample
 import com.gridsense.data.channelInsights
+import com.gridsense.data.latencyInsights
 import com.gridsense.data.channelReport
 import com.gridsense.data.loggedNodes
 import com.gridsense.ui.components.EmptyState
@@ -60,6 +62,7 @@ fun AnalysisPane(
     val byPoint = remember(samples) { samples.groupBy { it.pointId } }
     val report = remember(logged, byPoint) { channelReport(logged, byPoint) }
     val findings = remember(points, samples) { channelInsights(points, samples) }
+    val latency = remember(points, samples) { latencyInsights(points, samples) }
     val fits = remember(logged, byPoint, routers) { routers.map { it to pathLossFit(it, logged, byPoint) } }
 
     if (logged.isEmpty()) {
@@ -91,6 +94,21 @@ fun AnalysisPane(
         }
         items(fits, key = { "pathloss-" + it.first.id }) { (router, fit) ->
             PathLossSection(router, fit, textMeasurer)
+        }
+        item(key = "latency") {
+            SectionCard(title = "Latency", icon = Icons.Filled.Speed) {
+                if (latency == null) {
+                    Text("No latency measurements have been logged yet.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    for (r in latency.ratings) MetricRow(r.label, r.value, level = r.level, rated = true)
+                    for (line in latency.lines) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+                            Text("•", style = MaterialTheme.typography.bodyMedium)
+                            Text(line, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
         }
         item(key = "channels") {
             if (report == null) {

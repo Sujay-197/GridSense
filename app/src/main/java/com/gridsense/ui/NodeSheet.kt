@@ -52,6 +52,7 @@ import com.gridsense.data.KIND_PING
 import com.gridsense.data.STATUS_DONE
 import com.gridsense.data.STATUS_LOGGING
 import com.gridsense.data.Sample
+import com.gridsense.data.latencyValue
 import com.gridsense.data.pointValue
 import com.gridsense.ui.components.MetricRow
 import com.gridsense.ui.components.SectionCard
@@ -120,6 +121,9 @@ fun NodeSheet(vm: SurveyViewModel, point: GridPoint, samples: List<Sample>) {
                     Rated("Latency", Metric.LATENCY, ping?.rttAvgMs)
                     Rated("Jitter", Metric.JITTER, ping?.rttJitterMs)
                     Rated("Packet loss", Metric.LOSS, ping?.rttLossPct)
+                    for (m in listOf(Metric.DNS, Metric.TCP_CONNECT, Metric.LOADED_LATENCY, Metric.BUFFERBLOAT, Metric.DOWNLOAD)) {
+                        latencyValue(samples, m)?.let { Rated(m.label, m, it) }
+                    }
                     MetricRow("Ping target", ping?.pingHost)
                 }
                 Text(
