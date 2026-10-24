@@ -1,6 +1,7 @@
 package com.gridsense.data
 
 import com.gridsense.core.Metric
+import com.gridsense.core.isDfs
 import com.gridsense.core.QualityLevel
 import com.gridsense.core.median
 import com.gridsense.core.nodeLabel
@@ -88,6 +89,7 @@ fun buildInsights(points: List<GridPoint>, samples: List<Sample>): List<InsightS
 
     wifiCoverage(logged, byPoint)?.let { sections += it }
     airwaves(logged, byPoint)?.let { sections += it }
+    channels(logged, byPoint)?.let { sections += it }
     cellular(logged, byPoint)?.let { sections += it }
     latency(logged, byPoint)?.let { sections += it }
     dataQuality(logged, byPoint)?.let { sections += it }
@@ -219,7 +221,6 @@ private fun airwaves(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
 
     val mySsid = links.groupingBy { it.ssid }.eachCount().maxByOrNull { it.value }?.key
     val myFreq = links.groupingBy { it.freqMhz!! }.eachCount().maxByOrNull { it.value }!!.key
-    val myChannel = wifiChannel(myFreq)
 
     if (myFreq < 3000 && mySsid != null) {
         val fiveGhz = scans.filter { it.ssid == mySsid && (it.freqMhz ?: 0) >= 5000 }
@@ -240,40 +241,7 @@ private fun airwaves(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
             "mesh networks."
     }
 
-    val neighbours = scans.filter { !it.ssid.isNullOrBlank() && it.ssid != mySsid }
-        .groupBy { it.bssid }
-        .mapValues { (_, rows) -> rows.first() to median(rows.map { it.rssiDbm!!.toDouble() }) }
-        .values.sortedByDescending { it.second }
-    if (neighbours.isEmpty()) {
-        lines += "No other networks were heard, so there is nothing competing for the air."
-    } else {
-        lines += "${neighbours.size} neighbouring network${if (neighbours.size == 1) "" else "s"} " +
-            "heard."
-        val overlapping = if (myFreq < 3000 && myChannel != null) {
-            neighbours.filter { (row, _) ->
-                val ch = row.freqMhz?.let { wifiChannel(it) }
-                row.freqMhz != null && row.freqMhz < 3000 && ch != null && abs(ch - myChannel) < 5
-            }
-        } else {
-            neighbours.filter { (row, _) -> row.freqMhz == myFreq }
-        }
-        val loud = overlapping.filter { it.second > INTERFERING_DBM }
-        val (top, topLevel) = neighbours.first()
-        val topCh = top.freqMhz?.let { wifiChannel(it) }
-        lines += if (loud.isNotEmpty()) {
-            "Possible interference: ${loud.joinToString(", ") { "${it.first.ssid} (${num(it.second)} dBm)" }} " +
-                "${if (loud.size == 1) "shares" else "share"} airtime with your channel $myChannel. " +
-                "Moving the router to a quieter channel could help."
-        } else {
-            "Interference looks low: the strongest neighbour, ${top.ssid}, is at ${num(topLevel)} dBm" +
-                (if (topCh != null) " on channel $topCh" else "") +
-                when (overlapping.size) {
-                    0 -> ", and none overlap your channel."
-                    1 -> ", and the one that overlaps your channel is weak."
-                    else -> ", and the ${overlapping.size} that overlap your channel are all weak."
-                }
-        }
-    }
+    if (lines.isEmpty()) return null
     return InsightSection("Bands and neighbours", lines)
 }
 
@@ -327,6 +295,112 @@ private fun cellular(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
     }
     return InsightSection("Cellular", lines, ratings)
 }
+
+/** The caveat every channel finding carries. */
+const val CHANNEL_CAVEAT = "A phone scan is a snapshot of beacons: it shows how strong neighbours " +
+    "are, not how busy they are. Real airtime use can't be measured without monitor mode."
+
+private fun channelList(channels: Collection<Int>) = channels.joinToString(", ")
+
+private fun channels(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): InsightSection? {
+    val report = channelReport(logged, byPoint) ?: return null
+    val all = logged.flatMap { byPoint[it.id].orEmpty() }
+    val links = all.filter { it.kind == KIND_LINK && it.freqMhz != null }
+    val scans = all.filter { (it.kind == KIND_SCAN || it.kind == KIND_SCAN_CACHED) && it.rssiDbm != null }
+    val lines = ArrayList<String>()
+
+    val nets = report.networks
+    val own = nets.count { it.own }
+    lines += "Heard ${nets.size} access point${if (nets.size == 1) "" else "s"}: " +
+        "${nets.count { it.band24 }} on 2.4 GHz and ${nets.count { it.band5 }} on 5 GHz" +
+        (if (own > 0) ", $own of them your own router's" else "") + "."
+
+    if (scans.isNotEmpty() && links.isNotEmpty()) {
+        val mySsid = links.groupingBy { it.ssid }.eachCount().maxByOrNull { it.value }?.key
+        val myFreq = links.groupingBy { it.freqMhz!! }.eachCount().maxByOrNull { it.value }!!.key
+        val myChannel = wifiChannel(myFreq)
+        val neighbours = scans.filter { !it.ssid.isNullOrBlank() && it.ssid != mySsid }
+            .groupBy { it.bssid }
+            .mapValues { (_, rows) -> rows.first() to median(rows.map { it.rssiDbm!!.toDouble() }) }
+            .values.sortedByDescending { it.second }
+        if (neighbours.isEmpty()) {
+            lines += "No other networks were heard, so there is nothing competing for the air."
+        } else {
+            lines += "${neighbours.size} neighbouring network${if (neighbours.size == 1) "" else "s"} " +
+                "heard."
+            val overlapping = if (myFreq < 3000 && myChannel != null) {
+                neighbours.filter { (row, _) ->
+                    val ch = row.freqMhz?.let { wifiChannel(it) }
+                    row.freqMhz != null && row.freqMhz < 3000 && ch != null && abs(ch - myChannel) < 4
+                }
+            } else {
+                neighbours.filter { (row, _) -> row.freqMhz == myFreq }
+            }
+            val loud = overlapping.filter { it.second > INTERFERING_DBM }
+            val (top, topLevel) = neighbours.first()
+            val topCh = top.freqMhz?.let { wifiChannel(it) }
+            lines += if (loud.isNotEmpty()) {
+                "Possible interference: ${loud.joinToString(", ") { "${it.first.ssid} (${num(it.second)} dBm)" }} " +
+                    "${if (loud.size == 1) "shares" else "share"} airtime with your channel $myChannel."
+            } else {
+                "Interference looks low: the strongest neighbour, ${top.ssid}, is at ${num(topLevel)} dBm" +
+                    (if (topCh != null) " on channel $topCh" else "") +
+                    when (overlapping.size) {
+                        0 -> ", and none overlap your channel."
+                        1 -> ", and the one that overlaps your channel is weak."
+                        else -> ", and the ${overlapping.size} that overlap your channel are all weak."
+                    }
+            }
+        }
+    }
+
+    report.advice24?.let { a ->
+        val current = a.current
+        if (current != null) {
+            lines += if (a.change) {
+                "Channel ${a.best.channel} would be quieter than your channel $current by " +
+                    (if (a.gainDb!!.isInfinite()) "a wide margin: no neighbour overlaps it" else "${num(round1(a.gainDb))} dB") +
+                    ". Consider moving the router's 2.4 GHz radio there."
+            } else {
+                "Channel $current is fine: none of channels ${channelList(CANDIDATES_24)} is at least " +
+                    "${num(CHANNEL_CHANGE_DB)} dB quieter, so changing would not clearly help."
+            }
+            if (current !in CANDIDATES_24) {
+                lines += "Channel $current overlaps two of the standard channels 1, 6 and 11, so it " +
+                    "collides with networks on both."
+            }
+        } else {
+            lines += "The quietest 2.4 GHz channel here is ${a.best.channel}."
+        }
+    }
+
+    val own5 = report.connected?.takeIf { it.band5 }
+    report.advice5?.let { a ->
+        if (own5 != null) {
+            lines += "On 5 GHz your channel ${own5.channel} (${own5.widthMhz} MHz) has " +
+                "${report.coChannel5.size} co-channel and ${report.overlapping5.size} overlapping " +
+                "network${if (report.overlapping5.size == 1) "" else "s"}" +
+                (if (report.coChannel5.isNotEmpty()) ": " + report.coChannel5.joinToString(", ") { it.label } else "") + "."
+            lines += if (a.change) {
+                "Channel ${a.best.channel} is the least occupied 5 GHz channel and would be quieter."
+            } else {
+                "Channel ${own5.channel} is already among the least occupied 5 GHz channels."
+            }
+        } else {
+            lines += "The least occupied 5 GHz channel here is ${a.best.channel}."
+        }
+        val dfs = listOfNotNull(own5?.channel, a.best.channel).filter { isDfs(it) }.distinct()
+        if (dfs.isNotEmpty()) {
+            lines += "Channel ${channelList(dfs)} is a DFS channel (52 to 144): the router must " +
+                "leave it if it detects radar, which costs a short outage."
+        }
+    }
+
+    lines += CHANNEL_CAVEAT
+    return InsightSection("Channels", lines)
+}
+
+private fun round1(v: Double) = Math.round(v * 10) / 10.0
 
 private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): InsightSection? {
     val pings = logged.associateWith { p -> byPoint[p.id].orEmpty().lastOrNull { it.kind == KIND_PING } }

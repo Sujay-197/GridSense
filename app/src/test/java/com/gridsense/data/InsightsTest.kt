@@ -101,7 +101,7 @@ class InsightsTest {
     fun aDistantChannelIsNotInterference() {
         // Channel 11 does not overlap channel 1.
         val samples = wifi(List(9) { -55 }) + scan(1, "Airtel_padm_6652", "a4:08", 2462, -60)
-        val air = text(buildInsights(grid, samples), "Bands and neighbours")
+        val air = text(buildInsights(grid, samples), "Channels")
         assertTrue(air.contains("Interference looks low"))
         assertTrue(air.contains("none overlap your channel"))
     }
@@ -110,14 +110,14 @@ class InsightsTest {
     fun aLoudOverlappingNeighbourIsFlagged() {
         // Channel 3 overlaps channel 1, and -60 dBm is loud.
         val samples = wifi(List(9) { -55 }) + scan(1, "Karthik's home", "4c:ae", 2422, -60)
-        val air = text(buildInsights(grid, samples), "Bands and neighbours")
+        val air = text(buildInsights(grid, samples), "Channels")
         assertTrue(air.contains("Possible interference: Karthik's home (-60 dBm)"))
     }
 
     @Test
     fun oneWeakOverlappingNeighbourReadsInTheSingular() {
         val samples = wifi(List(9) { -55 }) + scan(1, "Karthik's home", "4c:ae", 2422, -86)
-        val air = text(buildInsights(grid, samples), "Bands and neighbours")
+        val air = text(buildInsights(grid, samples), "Channels")
         assertTrue(air.contains("the one that overlaps your channel is weak"))
     }
 
