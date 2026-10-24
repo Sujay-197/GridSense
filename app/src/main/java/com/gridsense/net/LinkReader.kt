@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import java.net.Inet4Address
 
 /** One reading of the current Wi-Fi association. */
 data class LinkReading(
@@ -44,14 +45,18 @@ fun identifiersReadable(reading: LinkReading?): Boolean {
     return true
 }
 
-/** The default-route gateway of the active network, which is what we ping. */
+/**
+ * The IPv4 default-route gateway of the active network, which is what we ping. IPv6 gateways
+ * are skipped: they are usually link-local fe80:: addresses, which the plain ping binary cannot
+ * reach without a scope, so every probe would be lost.
+ */
 fun gatewayAddress(context: Context): String? {
     val cm = context.applicationContext
         .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     val network = cm.activeNetwork ?: return null
     val props = cm.getLinkProperties(network) ?: return null
     return props.routes
-        .firstOrNull { it.isDefaultRoute && it.hasGateway() }
+        .firstOrNull { it.isDefaultRoute && it.hasGateway() && it.gateway is Inet4Address }
         ?.gateway
         ?.hostAddress
 }
@@ -81,7 +86,7 @@ fun pingTarget(context: Context, override: String?): String? {
     if (!override.isNullOrBlank()) return override.trim()
     return when (activeTransport(context)) {
         Transport.CELLULAR -> DEFAULT_PUBLIC_HOST
-        Transport.WIFI -> gatewayAddress(context)
+        Transport.WIFI -> gatewayAddress(context) ?: DEFAULT_PUBLIC_HOST
         else -> gatewayAddress(context) ?: DEFAULT_PUBLIC_HOST
     }
 }
