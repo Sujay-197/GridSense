@@ -1,7 +1,9 @@
 package com.gridsense.data
 
+import com.gridsense.core.Metric
 import com.gridsense.core.median
 import com.gridsense.core.nodeLabel
+import com.gridsense.core.qualityLevel
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -24,34 +26,13 @@ const val GRADIENT_DB = 4.0
 /** A 2.4 GHz neighbour stronger than this on an overlapping channel can slow the link down. */
 const val INTERFERING_DBM = -70.0
 
-fun wifiBand(rssi: Double): String = when {
-    rssi >= -50 -> "excellent"
-    rssi >= -60 -> "very good"
-    rssi >= -67 -> "good"
-    rssi >= -70 -> "fair"
-    rssi >= -80 -> "weak"
-    else -> "poor"
-}
+fun wifiBand(rssi: Double): String = qualityLevel(Metric.RSSI, rssi).word
 
-fun rsrpBand(rsrp: Double): String = when {
-    rsrp >= -80 -> "excellent"
-    rsrp >= -90 -> "good"
-    rsrp >= -100 -> "fair"
-    else -> "poor"
-}
+fun rsrpBand(rsrp: Double): String = qualityLevel(Metric.CELL_RSRP, rsrp).word
 
-fun rsrqBand(rsrq: Double): String = when {
-    rsrq >= -10 -> "good"
-    rsrq >= -15 -> "fair"
-    else -> "poor"
-}
+fun rsrqBand(rsrq: Double): String = qualityLevel(Metric.CELL_RSRQ, rsrq).word
 
-fun sinrBand(sinr: Double): String = when {
-    sinr >= 20 -> "excellent"
-    sinr >= 13 -> "good"
-    sinr >= 0 -> "fair"
-    else -> "poor"
-}
+fun sinrBand(sinr: Double): String = qualityLevel(Metric.CELL_SINR, sinr).word
 
 /** The Wi-Fi channel number for a centre frequency, or null for one we do not recognise. */
 fun wifiChannel(freqMhz: Int): Int? = when (freqMhz) {
