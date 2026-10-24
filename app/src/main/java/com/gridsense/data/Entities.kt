@@ -88,6 +88,12 @@ data class Sample(
     val freqMhz: Int? = null,
     val rssiDbm: Int? = null,
     val linkSpeedMbps: Int? = null,
+    /** Scan rows only: occupied width (20, 40, 80, 160, 320). Null on rows from before v6. */
+    val channelWidthMhz: Int? = null,
+    /** Scan rows only: centre of the whole occupied block for channels wider than 20 MHz. */
+    val centerFreq0Mhz: Int? = null,
+    /** Scan rows only: ScanResult.wifiStandard on Android 11+, null on 10. */
+    val wifiStandard: Int? = null,
     // Cellular
     val cellTech: String? = null,
     val cellDbm: Int? = null,

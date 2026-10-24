@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /** Bump together with a new entry in [ALL_MIGRATIONS]; never fall back to a destructive one. */
-const val DB_VERSION = 5
+const val DB_VERSION = 6
 
 @Database(
     entities = [SurveyRoom::class, GridPoint::class, Sample::class, Router::class],

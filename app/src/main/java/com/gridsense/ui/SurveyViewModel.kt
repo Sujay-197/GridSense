@@ -330,7 +330,10 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
                             bssid = it.bssid,
                             ssid = it.ssid,
                             freqMhz = it.freqMhz,
-                            rssiDbm = it.rssiDbm
+                            rssiDbm = it.rssiDbm,
+                            channelWidthMhz = it.widthMhz,
+                            centerFreq0Mhz = it.centerFreq0Mhz,
+                            wifiStandard = it.wifiStandard
                         )
                     }
                 )

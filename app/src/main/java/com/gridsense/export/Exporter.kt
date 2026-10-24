@@ -78,7 +78,8 @@ fun writeCsvs(
                     "kind", "bssid", "ssid", "freq_mhz", "rssi_dbm", "link_speed_mbps",
                     "cell_tech", "cell_dbm", "cell_level", "rsrp", "rsrq", "sinr",
                     "cell_id", "tac", "pci", "arfcn", "operator",
-                    "ping_host", "rtt_avg_ms", "rtt_jitter_ms", "rtt_loss_pct"
+                    "ping_host", "rtt_avg_ms", "rtt_jitter_ms", "rtt_loss_pct",
+                    "channel_width_mhz", "center_freq0_mhz", "wifi_standard"
                 )
             )
         )
@@ -93,7 +94,8 @@ fun writeCsvs(
                         s.freqMhz, s.rssiDbm, s.linkSpeedMbps,
                         s.cellTech, s.cellDbm, s.cellLevel, s.rsrp, s.rsrq, s.sinr,
                         s.cellId, s.tac, s.pci, s.arfcn, s.operator,
-                        s.pingHost, s.rttAvgMs, s.rttJitterMs, s.rttLossPct
+                        s.pingHost, s.rttAvgMs, s.rttJitterMs, s.rttLossPct,
+                        s.channelWidthMhz, s.centerFreq0Mhz, s.wifiStandard
                     )
                 )
             )
@@ -192,7 +194,10 @@ fun writeJson(
                     ", \"ping_host\": " + jsonString(s.pingHost) +
                     ", \"rtt_avg_ms\": " + jsonNumber(s.rttAvgMs) +
                     ", \"rtt_jitter_ms\": " + jsonNumber(s.rttJitterMs) +
-                    ", \"rtt_loss_pct\": " + jsonNumber(s.rttLossPct) + "}"
+                    ", \"rtt_loss_pct\": " + jsonNumber(s.rttLossPct) +
+                    ", \"channel_width_mhz\": " + jsonNumber(s.channelWidthMhz) +
+                    ", \"center_freq0_mhz\": " + jsonNumber(s.centerFreq0Mhz) +
+                    ", \"wifi_standard\": " + jsonNumber(s.wifiStandard) + "}"
             )
             w.write(if (index == samples.lastIndex) "\n" else ",\n")
         }
