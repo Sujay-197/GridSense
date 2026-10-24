@@ -13,15 +13,18 @@ readings into a heatmap. No floor plan, GPS or location fix is needed.
    node, and optionally a ping target.
 2. **Grid.** Every cell has a node at its centre. Grey means pending, a pulsing marker means
    the node is being logged, and a node that is done is coloured by the survey's primary
-   metric. Stand at a node, tap it and press *Start logging*; long-press to retake it. A node
-   you cannot stand on, such as one under a table, can be disabled from its sheet. The title
-   bar carries a done / total counter.
+   metric's quality band. Stand at a node, tap it and press *Start logging*; the sheet shows
+   each stage of the run, and *Retake* redoes a node (long-press is a shortcut). A node you
+   cannot stand on, such as one under a table, can be disabled from its sheet. The top bar
+   shows how many nodes are done.
 3. **Router node.** The floating button drops a router marker anywhere on the plan. Give it a
    label and pick its BSSID from a live scan list.
 4. **Heatmap.** Inverse distance weighting with `p = 2` on a 0.1 m raster clipped to the grid,
-   with a colour ramp and a legend. Switch between Wi-Fi RSSI, the cellular signal
-   quantities, latency, jitter and loss, filter by BSSID, and show or hide the routers. Export
-   the PNG, or the raw samples, nodes and routers as CSV or JSON.
+   with a legend. Pick Wi-Fi RSSI, the cellular signal quantities, latency, jitter or loss,
+   filter by BSSID, and show or hide the routers. *Relative* stretches the colours over this
+   room's range; *Fixed* colours by quality band, so red always means poor. The top bar's
+   share menu exports the PNG, the raw samples, nodes and routers as CSV or JSON, or the
+   report as text.
 5. **Report.** A plain-language write-up of the survey, explained in [the next section](#the-report).
 
 ## The report
@@ -29,8 +32,8 @@ readings into a heatmap. No floor plan, GPS or location fix is needed.
 The *Report* tab turns the logged samples into short findings written for a reader who has not
 seen the raw data. It is rule-based, not AI: every sentence comes from a fixed threshold or
 comparison in [`Insights.kt`](app/src/main/java/com/gridsense/data/Insights.kt), so the same
-survey always produces the same text and it works offline. *Share report as text* hands the
-whole thing to any app, ready to paste into a write-up.
+survey always produces the same text and it works offline. *Report text* in the share menu
+hands the whole thing to any app, ready to paste into a write-up.
 
 Only enabled nodes that have been logged are analysed. All per-node figures are medians of that
 node's readings, which keeps a single outlier from skewing the result.

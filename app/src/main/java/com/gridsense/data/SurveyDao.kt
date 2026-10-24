@@ -27,6 +27,16 @@ interface SurveyDao {
     @Update
     suspend fun updatePoint(point: GridPoint)
 
+    @Update
+    suspend fun updateRoom(room: SurveyRoom)
+
+    @Query("SELECT * FROM grid_point ORDER BY roomId, seq")
+    fun allPoints(): Flow<List<GridPoint>>
+
+    /** The radio rows every survey card needs for its quality chip. */
+    @Query("SELECT * FROM sample WHERE kind IN ('LINK', 'CELL')")
+    fun signalSamples(): Flow<List<Sample>>
+
     @Query("SELECT * FROM survey_room ORDER BY createdAt DESC")
     fun rooms(): Flow<List<SurveyRoom>>
 

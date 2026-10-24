@@ -1,0 +1,160 @@
+package com.gridsense.ui
+
+import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
+import com.gridsense.core.SurveyMode
+import com.gridsense.core.gridNodes
+import com.gridsense.core.gridOutline
+import com.gridsense.data.Db
+import com.gridsense.data.GridPoint
+import com.gridsense.data.STATUS_PENDING
+import com.gridsense.data.SurveyRoom
+import com.gridsense.data.encodePolygon
+import kotlinx.coroutines.launch
+
+const val MAX_CELLS_PER_SIDE = 20
+
+/** Everything the setup form edits, as typed. */
+data class SetupForm(
+    val name: String = "",
+    val mode: SurveyMode = SurveyMode.WIFI,
+    val pingHost: String = "",
+    val samples: String = "10",
+    val rows: String = "4",
+    val cols: String = "4",
+    val cell: String = "1.0"
+) {
+    val rowsValue get() = rows.toIntOrNull()
+    val colsValue get() = cols.toIntOrNull()
+    val cellValue get() = cell.toDoubleOrNull()
+    val samplesValue get() = samples.toIntOrNull()
+
+    val nameError get() = if (name.isBlank()) "Give the survey a name" else null
+    val rowsError get() = sideError(rowsValue)
+    val colsError get() = sideError(colsValue)
+    val cellError get() = cellValue.let { if (it == null || it <= 0) "Enter a size above 0 m" else null }
+    val samplesError get() = samplesValue.let { if (it == null || it < 1) "At least 1 sample" else null }
+
+    val gridValid get() = rowsError == null && colsError == null && cellError == null
+
+    /** The first problem, shown next to the disabled Create button. */
+    val blocker: String?
+        get() = nameError ?: rowsError?.let { "Rows: $it" } ?: colsError?.let { "Columns: $it" }
+            ?: cellError?.let { "Cell size: $it" } ?: samplesError?.let { "Samples: $it" }
+
+    private fun sideError(v: Int?) =
+        if (v == null || v !in 1..MAX_CELLS_PER_SIDE) "Use 1 to $MAX_CELLS_PER_SIDE" else null
+}
+
+/**
+ * The setup destination's own state. With an `editId` argument it edits that survey's details;
+ * the grid is fixed once nodes exist, so only the survey and radio fields change.
+ */
+class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewModel(app) {
+
+    private val dao = Db.get(app).dao()
+
+    val editId: Long? = saved.get<Long>("editId")?.takeIf { it > 0 }
+    val editing get() = editId != null
+
+    var form by mutableStateOf(SetupForm())
+    private var initial = SetupForm()
+
+    var loaded by mutableStateOf(editId == null)
+        private set
+
+    val dirty get() = form != initial
+
+    private var editedRoom: SurveyRoom? = null
+
+    init {
+        if (editId != null) {
+            viewModelScope.launch {
+                val r = dao.roomNow(editId)
+                if (r != null) {
+                    editedRoom = r
+                    val f = SetupForm(
+                        name = r.name,
+                        mode = modeOf(r),
+                        pingHost = r.pingHost.orEmpty(),
+                        samples = r.samplesPerPoint.toString(),
+                        rows = r.gridRows.toString(),
+                        cols = r.gridCols.toString(),
+                        cell = r.cellSizeM.toString()
+                    )
+                    initial = f
+                    form = f
+                }
+                loaded = true
+            }
+        }
+    }
+
+    fun update(change: SetupForm.() -> SetupForm) {
+        form = form.change()
+    }
+
+    /** Saves, then reports the survey id. Does nothing while the form has a blocker. */
+    fun save(onSaved: (Long) -> Unit) {
+        val f = form
+        if (f.blocker != null) return
+        val existing = editedRoom
+        viewModelScope.launch {
+            if (existing != null) {
+                dao.updateRoom(
+                    existing.copy(
+                        name = f.name.trim(),
+                        mode = f.mode.name,
+                        samplesPerPoint = f.samplesValue!!,
+                        pingHost = f.pingHost.trim().ifBlank { null }
+                    )
+                )
+                initial = f
+                onSaved(existing.id)
+            } else {
+                onSaved(create(f))
+            }
+        }
+    }
+
+    /** Saves the survey with one pending node at the centre of every grid cell. */
+    private suspend fun create(f: SetupForm): Long {
+        val rows = f.rowsValue!!
+        val cols = f.colsValue!!
+        val cell = f.cellValue!!
+        val id = dao.insertRoom(
+            SurveyRoom(
+                name = f.name.trim(),
+                mode = f.mode.name,
+                samplesPerPoint = f.samplesValue!!,
+                pingHost = f.pingHost.trim().ifBlank { null },
+                polygon = encodePolygon(gridOutline(rows, cols, cell)),
+                gridRows = rows,
+                gridCols = cols,
+                cellSizeM = cell,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        dao.insertPoints(
+            gridNodes(rows, cols, cell).mapIndexed { index, node ->
+                GridPoint(
+                    roomId = id,
+                    seq = index,
+                    row = node.row,
+                    col = node.col,
+                    x = node.x,
+                    y = node.y,
+                    enabled = true,
+                    status = STATUS_PENDING
+                )
+            }
+        )
+        initial = f
+        return id
+    }
+}
