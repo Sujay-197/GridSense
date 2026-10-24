@@ -105,10 +105,10 @@ fun writeCsvs(
 
     val routersFile = File(exportsDir(context), base + "_routers.csv")
     routersFile.bufferedWriter().use { w ->
-        w.write(csvRow(listOf("router_id", "x_m", "y_m", "bssid", "label")))
+        w.write(csvRow(listOf("router_id", "x_m", "y_m", "bssid", "label", "height_diff_m")))
         w.newLine()
         for (r in routers) {
-            w.write(csvRow(listOf(r.id, r.x, r.y, r.bssid, r.label)))
+            w.write(csvRow(listOf(r.id, r.x, r.y, r.bssid, r.label, r.heightDiffM)))
             w.newLine()
         }
     }
@@ -208,7 +208,8 @@ fun writeJson(
             w.write(
                 "    {\"id\": " + r.id + ", \"x_m\": " + r.x + ", \"y_m\": " + r.y +
                     ", \"bssid\": " + jsonString(r.bssid) +
-                    ", \"label\": " + jsonString(r.label) + "}"
+                    ", \"label\": " + jsonString(r.label) +
+                    ", \"height_diff_m\": " + r.heightDiffM + "}"
             )
             w.write(if (index == routers.lastIndex) "\n" else ",\n")
         }

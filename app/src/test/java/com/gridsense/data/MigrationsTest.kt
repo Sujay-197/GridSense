@@ -83,4 +83,11 @@ class MigrationsTest {
             assertEquals(false, sample[c])
         }
     }
+
+    @Test
+    fun sixToSevenAddsRouterHeightWithADefault() {
+        val router = columns(schema(7)!!).getValue("router")
+        assertEquals(true, router["heightDiffM"])
+        assertTrue(schema(7)!!.contains("\"defaultValue\": \"0\""))
+    }
 }

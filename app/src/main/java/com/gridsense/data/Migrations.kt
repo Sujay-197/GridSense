@@ -27,4 +27,10 @@ val MIGRATION_5_6 = AddColumns(
     )
 )
 
-val ALL_MIGRATIONS: Array<AddColumns> = arrayOf(MIGRATION_4_5, MIGRATION_5_6)
+/** How far the router sits above the phone, for 3D distances in the path-loss fit. */
+val MIGRATION_6_7 = AddColumns(
+    6, 7,
+    listOf("ALTER TABLE router ADD COLUMN heightDiffM REAL NOT NULL DEFAULT 0")
+)
+
+val ALL_MIGRATIONS: Array<AddColumns> = arrayOf(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)

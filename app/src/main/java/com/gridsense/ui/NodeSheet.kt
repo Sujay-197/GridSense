@@ -37,7 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.gridsense.core.Metric
 import com.gridsense.core.median
@@ -161,6 +163,8 @@ private fun Rated(label: String, metric: Metric, value: Double?) {
 fun RouterDialog(vm: SurveyViewModel) {
     var label by remember { mutableStateOf("") }
     var bssid by remember { mutableStateOf<String?>(null) }
+    var height by remember { mutableStateOf("0") }
+    val heightValue = height.replace(',', '.').toDoubleOrNull()?.takeIf { it in -10.0..10.0 }
 
     AlertDialog(
         onDismissRequest = { vm.cancelRouterPlacement() },
@@ -176,6 +180,18 @@ fun RouterDialog(vm: SurveyViewModel) {
                     onValueChange = { label = it },
                     label = { Text("Label") },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = height,
+                    onValueChange = { height = it },
+                    label = { Text("Router height above the phone (m)") },
+                    supportingText = {
+                        Text(if (heightValue == null) "Enter -10 to 10 m" else "Used for 3D distance in the path-loss fit.")
+                    },
+                    isError = heightValue == null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(
@@ -219,8 +235,8 @@ fun RouterDialog(vm: SurveyViewModel) {
         },
         confirmButton = {
             TextButton(
-                onClick = { vm.confirmRouter(bssid!!, label.trim()) },
-                enabled = bssid != null && label.isNotBlank()
+                onClick = { vm.confirmRouter(bssid!!, label.trim(), heightValue!!) },
+                enabled = bssid != null && label.isNotBlank() && heightValue != null
             ) { Text("Place") }
         },
         dismissButton = { TextButton(onClick = { vm.cancelRouterPlacement() }) { Text("Cancel") } }

@@ -1,5 +1,6 @@
 package com.gridsense.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -130,7 +131,10 @@ data class Router(
     val x: Double,
     val y: Double,
     val bssid: String,
-    val label: String
+    val label: String,
+    /** Router height above the phone in metres; 0 treats them as level. */
+    @ColumnInfo(defaultValue = "0")
+    val heightDiffM: Double = 0.0
 )
 
 fun encodePolygon(corners: List<Pt>): String =

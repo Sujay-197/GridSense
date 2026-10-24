@@ -382,7 +382,7 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun confirmRouter(bssid: String, label: String) {
+    fun confirmRouter(bssid: String, label: String, heightDiffM: Double) {
         val id = roomId.value ?: return
         viewModelScope.launch {
             dao.insertRouter(
@@ -391,7 +391,8 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
                     x = pendingRouterX,
                     y = pendingRouterY,
                     bssid = bssid,
-                    label = label
+                    label = label,
+                    heightDiffM = heightDiffM
                 )
             )
             routerDialogOpen = false
