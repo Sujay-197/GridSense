@@ -430,7 +430,7 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun reportText(id: Long): Pair<String, String>? = withContext(Dispatchers.Default) {
         val s = snapshot(id) ?: return@withContext null
         val title = "GridSense report: " + s.room.name
-        title to insightsAsText(title, buildInsights(s.points, s.samples))
+        title to insightsAsText(title, buildInsights(s.points, s.samples, s.routers))
     }
 }
 

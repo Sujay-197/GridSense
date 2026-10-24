@@ -240,7 +240,7 @@ fun SurveyScreen(
                 )
                 SurveyTab.HEATMAP -> HeatmapPane(vm, currentRoom, polygon, points, samples, routers, textMeasurer)
                 SurveyTab.ANALYSIS -> AnalysisPane(points, samples, textMeasurer)
-                SurveyTab.REPORT -> ReportPane(points, samples)
+                SurveyTab.REPORT -> ReportPane(points, samples, routers)
             }
         }
     }

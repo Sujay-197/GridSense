@@ -78,7 +78,11 @@ private fun joinLabels(points: List<GridPoint>) = points.joinToString(", ") { la
  * differences between nodes are real, where the router probably is, what else is on the air,
  * how good the cellular signal is, and anything that makes the data less trustworthy.
  */
-fun buildInsights(points: List<GridPoint>, samples: List<Sample>): List<InsightSection> {
+fun buildInsights(
+    points: List<GridPoint>,
+    samples: List<Sample>,
+    routers: List<Router> = emptyList()
+): List<InsightSection> {
     val active = points.filter { it.enabled }
     val logged = active.filter { it.status == STATUS_DONE }
     val byPoint = samples.groupBy { it.pointId }
@@ -88,6 +92,7 @@ fun buildInsights(points: List<GridPoint>, samples: List<Sample>): List<InsightS
     if (logged.isEmpty()) return sections
 
     wifiCoverage(logged, byPoint)?.let { sections += it }
+    pathLoss(logged, byPoint, routers)?.let { sections += it }
     airwaves(logged, byPoint)?.let { sections += it }
     channels(logged, byPoint)?.let { sections += it }
     cellular(logged, byPoint)?.let { sections += it }
@@ -294,6 +299,41 @@ private fun cellular(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
             "near the edge of two cells."
     }
     return InsightSection("Cellular", lines, ratings)
+}
+
+private fun pathLoss(
+    logged: List<GridPoint>,
+    byPoint: Map<Long, List<Sample>>,
+    routers: List<Router>
+): InsightSection? {
+    if (routers.isEmpty()) return null
+    val lines = ArrayList<String>()
+    for (router in routers) {
+        val fit = pathLossFit(router, logged, byPoint)
+        if (fit == null) {
+            lines += "${router.label}: too few nodes heard ${router.bssid} at different distances of " +
+                "${num(MIN_FIT_DISTANCE_M)} m or more to fit a path-loss model."
+            continue
+        }
+        lines += "${router.label}: path-loss exponent n = ${num(round1(fit.n))}, " +
+            "${exponentBand(fit.n)}. RSSI at 1 m (P0) ${num(round1(fit.p0Dbm))} dBm, " +
+            "shadowing σ ${num(round1(fit.sigmaDb))} dB" +
+            (fit.r2?.let { ", R² ${String.format(Locale.US, "%.2f", it)}" } ?: "") +
+            ", from ${fit.count} nodes at ${String.format(Locale.US, "%.1f to %.1f m", fit.minDistanceM, fit.maxDistanceM)}."
+        val warnings = pathLossWarnings(fit)
+        if (warnings.isNotEmpty()) {
+            lines += warnings.joinToString(" ") + " Treat this n as indicative, not a measurement."
+        }
+        if (fit.tooClose.isNotEmpty()) {
+            lines += "Left out ${fit.tooClose.joinToString(", ") { it.label }}, closer than " +
+                "${num(MIN_FIT_DISTANCE_M)} m, where the log-distance model breaks down."
+        }
+        fit.eirpDbm?.let {
+            lines += "Estimated EIRP about ${num(round1(it))} dBm (P0 plus the free-space loss over the " +
+                "first metre). This is an estimate, not a measurement of the transmitter."
+        }
+    }
+    return InsightSection("Path loss", lines)
 }
 
 /** Enabled, logged nodes: the only ones any analysis looks at. */

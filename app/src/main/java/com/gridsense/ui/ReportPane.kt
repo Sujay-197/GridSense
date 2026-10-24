@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.SignalCellularAlt
@@ -22,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.gridsense.data.GridPoint
+import com.gridsense.data.Router
 import com.gridsense.data.Sample
 import com.gridsense.data.buildInsights
 import com.gridsense.ui.components.MetricRow
@@ -31,6 +33,7 @@ import com.gridsense.ui.theme.Spacing
 private fun sectionIcon(title: String): ImageVector = when (title) {
     "Overview" -> Icons.Filled.Summarize
     "Wi-Fi coverage" -> Icons.Filled.Wifi
+    "Path loss" -> Icons.AutoMirrored.Filled.ShowChart
     "Bands and neighbours" -> Icons.Filled.Router
     "Channels" -> Icons.Filled.SettingsInputAntenna
     "Cellular" -> Icons.Filled.SignalCellularAlt
@@ -41,8 +44,8 @@ private fun sectionIcon(title: String): ImageVector = when (title) {
 
 /** Plain-language findings for the survey, worked out from the logged samples. */
 @Composable
-fun ReportPane(points: List<GridPoint>, samples: List<Sample>) {
-    val sections = remember(points, samples) { buildInsights(points, samples) }
+fun ReportPane(points: List<GridPoint>, samples: List<Sample>, routers: List<Router>) {
+    val sections = remember(points, samples, routers) { buildInsights(points, samples, routers) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
