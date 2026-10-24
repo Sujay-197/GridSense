@@ -1,7 +1,7 @@
 package com.gridsense.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +9,26 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Router
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,41 +38,39 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
 import com.gridsense.core.Band
 import com.gridsense.core.Metric
 import com.gridsense.core.Pt
-import com.gridsense.core.boundsOf
 import com.gridsense.data.GridPoint
 import com.gridsense.data.KIND_LINK
 import com.gridsense.data.Router
 import com.gridsense.data.Sample
 import com.gridsense.data.SurveyRoom
-import com.gridsense.data.observations
-import com.gridsense.data.rasterize
-import com.gridsense.export.baseName
-import com.gridsense.export.share
-import com.gridsense.export.writeCsvs
-import com.gridsense.export.writeJson
-import com.gridsense.export.writePng
+import com.gridsense.ui.components.EmptyState
+import com.gridsense.ui.theme.GridSenseTheme
+import com.gridsense.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlin.math.roundToInt
 
-private const val RASTER_CELL_M = 0.1
+private fun familyName(band: Band) = when (band) {
+    Band.WIFI -> "Wi-Fi"
+    Band.CELLULAR -> "Cellular"
+    Band.IP -> "Network"
+}
+
+/** Chip text without the family prefix, since the chips sit under a family label. */
+private fun shortLabel(metric: Metric) = when (metric) {
+    Metric.RSSI -> "RSSI"
+    Metric.CELL_DBM -> "Signal"
+    Metric.CELL_RSRP -> "RSRP"
+    Metric.CELL_RSRQ -> "RSRQ"
+    Metric.CELL_SINR -> "SINR"
+    Metric.LATENCY -> "Ping"
+    Metric.TCP_CONNECT -> "TCP"
+    Metric.LOADED_LATENCY -> "Loaded"
+    else -> metric.label
+}
 
 @Composable
 fun HeatmapPane(
@@ -66,207 +79,135 @@ fun HeatmapPane(
     polygon: List<Pt>,
     points: List<GridPoint>,
     samples: List<Sample>,
-    routers: List<Router>
+    routers: List<Router>,
+    textMeasurer: TextMeasurer
 ) {
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    val textMeasurer = rememberTextMeasurer()
-    val scope = rememberCoroutineScope()
-
-    val bssids = remember(samples) {
-        samples.mapNotNull { it.bssid }.distinct().sorted()
-    }
-    val connectedBssids = remember(samples) {
+    val colors = GridSenseTheme.plan
+    val bssids = remember(samples) { samples.mapNotNull { it.bssid }.distinct().sorted() }
+    val connected = remember(samples) {
         samples.filter { it.kind == KIND_LINK }.mapNotNull { it.bssid }.distinct()
     }
 
     val metric = vm.metric
     val filter = vm.bssidFilter
     val showRouters = vm.showRouters
+    val fixed = vm.fixedScale
 
     val scene by produceState<HeatmapScene?>(
         initialValue = null,
-        polygon, points, samples, routers, metric, filter, showRouters, room.name
+        polygon, points, samples, routers, metric, filter, showRouters, fixed, room.name
     ) {
         value = withContext(Dispatchers.Default) {
-            val samplesByPoint = samples.groupBy { it.pointId }
-            val obs = observations(points, samplesByPoint, metric, filter)
-            val raster = rasterize(polygon, obs, RASTER_CELL_M)
-            HeatmapScene(
-                title = room.name,
-                polygonM = polygon,
-                raster = raster,
-                rasterImage = if (raster == null) null else rasterImage(raster, metric),
-                points = points,
-                routers = routers,
-                metric = metric,
-                showRouters = showRouters
-            )
+            buildHeatmapScene(room.name, polygon, points, samples, routers, metric, filter, showRouters, fixed)
         }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s),
+            verticalArrangement = Arrangement.spacedBy(Spacing.s)
         ) {
-            MetricPicker(vm, modifier = Modifier.weight(1f))
-            BssidPicker(vm, bssids, connectedBssids, modifier = Modifier.weight(1f))
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Switch(checked = vm.showRouters, onCheckedChange = { vm.showRouters = it })
-            Text("Show routers", style = MaterialTheme.typography.bodyMedium)
+            MetricChips(vm.metric) { vm.metric = it }
+            if (metric.band == Band.WIFI) BssidDropdown(vm, bssids, connected)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+            ) {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                    SegmentedButton(
+                        selected = !fixed,
+                        onClick = { vm.fixedScale = false },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2)
+                    ) { Text("Relative") }
+                    SegmentedButton(
+                        selected = fixed,
+                        onClick = { vm.fixedScale = true },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2)
+                    ) { Text("Fixed") }
+                }
+                FilterChip(
+                    selected = showRouters,
+                    onClick = { vm.showRouters = !showRouters },
+                    label = { Text("Routers") },
+                    leadingIcon = { Icon(Icons.Filled.Router, contentDescription = null, Modifier.size(FilterChipDefaults.IconSize)) }
+                )
+            }
+            Text(
+                if (fixed) "Colours follow fixed quality bands, so red always means poor."
+                else "Colours stretch from the weakest to the strongest spot in this room.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         val current = scene
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(Color.White)
-        ) {
-            if (current == null) {
-                Text(
-                    "Building the surface",
-                    modifier = Modifier.align(Alignment.Center)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                current == null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                current.raster == null -> EmptyState(
+                    icon = Icons.Filled.Layers,
+                    title = "Nothing to map yet",
+                    body = "No logged nodes have " + metric.label + " readings" +
+                        (if (filter != null) " for this access point" else "") + "."
                 )
-            } else if (current.raster == null) {
-                Text(
-                    "No logged points match this metric and filter yet.",
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(24.dp)
-                )
-            } else {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawHeatmapScene(current, textMeasurer)
+                else -> Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawHeatmapScene(current, textMeasurer, colors)
                 }
             }
         }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = {
-                    val ready = scene
-                    if (ready?.raster != null) {
-                        scope.launch {
-                            val file = withContext(Dispatchers.Default) {
-                                val image = renderScene(ready, textMeasurer, density, polygon)
-                                writePng(context, image, baseName(room))
-                            }
-                            share(context, listOf(file), "image/png")
-                        }
-                    }
-                },
-                enabled = scene?.raster != null,
-                modifier = Modifier.weight(1f)
-            ) { Text("PNG") }
-
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val files = withContext(Dispatchers.IO) {
-                            writeCsvs(context, room, points, samples, routers, baseName(room))
-                        }
-                        share(context, files, "text/csv")
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("CSV") }
-
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val file = withContext(Dispatchers.IO) {
-                            writeJson(context, room, points, samples, routers, baseName(room))
-                        }
-                        share(context, listOf(file), "application/json")
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("JSON") }
-        }
     }
-}
-
-/** Renders the same scene off screen so the exported PNG matches what the app shows. */
-private fun renderScene(
-    scene: HeatmapScene,
-    textMeasurer: TextMeasurer,
-    density: Density,
-    polygon: List<Pt>
-): ImageBitmap {
-    val bounds = boundsOf(polygon)
-    val width = 1400
-    val planHeight = (width * (bounds.height / bounds.width.coerceAtLeast(1e-6)))
-        .roundToInt()
-        .coerceIn(300, 2400)
-    val height = planHeight + 90
-    val image = ImageBitmap(width, height)
-    val canvas = GraphicsCanvas(image)
-    CanvasDrawScope().draw(
-        density,
-        LayoutDirection.Ltr,
-        canvas,
-        Size(width.toFloat(), height.toFloat())
-    ) {
-        drawHeatmapScene(scene, textMeasurer)
-    }
-    return image
 }
 
 @Composable
-private fun MetricPicker(vm: SurveyViewModel, modifier: Modifier = Modifier) {
-    var open by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(vm.metric.label)
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Metric.entries.forEach { metric ->
-                DropdownMenuItem(
-                    text = { Text(metric.label + " (" + metric.unit + ")") },
-                    onClick = {
-                        vm.metric = metric
-                        open = false
-                    }
+fun MetricChips(selectedMetric: Metric, onSelect: (Metric) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+    ) {
+        Band.entries.forEach { band ->
+            Text(
+                familyName(band),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = if (band == Band.WIFI) Spacing.xs else Spacing.m)
+            )
+            Metric.entries.filter { it.band == band }.forEach { m ->
+                val selected = selectedMetric == m
+                FilterChip(
+                    selected = selected,
+                    onClick = { onSelect(m) },
+                    label = { Text(shortLabel(m)) },
+                    leadingIcon = if (selected) {
+                        { Icon(Icons.Filled.Check, contentDescription = null, Modifier.size(FilterChipDefaults.IconSize)) }
+                    } else null,
+                    colors = FilterChipDefaults.filterChipColors()
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BssidPicker(
-    vm: SurveyViewModel,
-    bssids: List<String>,
-    connectedBssids: List<String>,
-    modifier: Modifier = Modifier
-) {
+private fun BssidDropdown(vm: SurveyViewModel, bssids: List<String>, connected: List<String>) {
     var open by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        OutlinedButton(
-            onClick = { open = true },
-            enabled = vm.metric.band == Band.WIFI,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (vm.metric.band == Band.WIFI) (vm.bssidFilter ?: "Connected AP") else "No BSSID filter")
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+    val current = vm.bssidFilter
+    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+        OutlinedTextField(
+            value = current?.let { it + if (it in connected) " (associated)" else "" } ?: "Connected AP (no filter)",
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text("Access point") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text("Connected AP (no filter)") },
                 onClick = {
@@ -275,9 +216,8 @@ private fun BssidPicker(
                 }
             )
             bssids.forEach { bssid ->
-                val suffix = if (bssid in connectedBssids) "  (associated)" else ""
                 DropdownMenuItem(
-                    text = { Text(bssid + suffix) },
+                    text = { Text(bssid + if (bssid in connected) "  (associated)" else "") },
                     onClick = {
                         vm.bssidFilter = bssid
                         open = false

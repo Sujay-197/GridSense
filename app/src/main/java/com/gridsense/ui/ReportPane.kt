@@ -1,69 +1,69 @@
 package com.gridsense.ui
 
-import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.SettingsInputAntenna
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Summarize
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.gridsense.data.GridPoint
+import com.gridsense.data.Router
 import com.gridsense.data.Sample
-import com.gridsense.data.SurveyRoom
 import com.gridsense.data.buildInsights
-import com.gridsense.data.insightsAsText
+import com.gridsense.ui.components.MetricRow
+import com.gridsense.ui.components.SectionCard
+import com.gridsense.ui.theme.Spacing
+
+private fun sectionIcon(title: String): ImageVector = when (title) {
+    "Overview" -> Icons.Filled.Summarize
+    "Wi-Fi coverage" -> Icons.Filled.Wifi
+    "Path loss" -> Icons.AutoMirrored.Filled.ShowChart
+    "Bands and neighbours" -> Icons.Filled.Router
+    "Channels" -> Icons.Filled.SettingsInputAntenna
+    "Cellular" -> Icons.Filled.SignalCellularAlt
+    "Latency, jitter and loss" -> Icons.Filled.Speed
+    "Data quality" -> Icons.Filled.WarningAmber
+    else -> Icons.Filled.Info
+}
 
 /** Plain-language findings for the survey, worked out from the logged samples. */
 @Composable
-fun ReportPane(room: SurveyRoom, points: List<GridPoint>, samples: List<Sample>) {
-    val context = LocalContext.current
-    val sections = remember(points, samples) { buildInsights(points, samples) }
+fun ReportPane(points: List<GridPoint>, samples: List<Sample>, routers: List<Router>) {
+    val sections = remember(points, samples, routers) { buildInsights(points, samples, routers) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(sections, key = { it.title }) { section ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(section.title, style = MaterialTheme.typography.titleMedium)
-                        for (line in section.lines) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("•", style = MaterialTheme.typography.bodyMedium)
-                                Text(line, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(Spacing.l),
+        verticalArrangement = Arrangement.spacedBy(Spacing.m)
+    ) {
+        items(sections, key = { it.title }) { section ->
+            SectionCard(title = section.title, icon = sectionIcon(section.title)) {
+                for (r in section.ratings) {
+                    MetricRow(r.label, r.value, level = r.level, rated = true)
+                }
+                for (line in section.lines) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+                        Text("•", style = MaterialTheme.typography.bodyMedium)
+                        Text(line, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
         }
-        OutlinedButton(
-            onClick = {
-                val text = insightsAsText("GridSense report: " + room.name, sections)
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "GridSense report: " + room.name)
-                    putExtra(Intent.EXTRA_TEXT, text)
-                }
-                context.startActivity(Intent.createChooser(send, "Share report"))
-            },
-            modifier = Modifier.fillMaxWidth().padding(12.dp)
-        ) { Text("Share report as text") }
     }
 }

@@ -39,7 +39,7 @@ fun pointValue(samples: List<Sample>, metric: Metric, bssidFilter: String?): Dou
                 Metric.LATENCY -> ping?.rttAvgMs
                 Metric.JITTER -> ping?.rttJitterMs
                 Metric.LOSS -> ping?.rttLossPct
-                else -> null
+                else -> latencyValue(samples, metric)
             }
         }
     }
@@ -114,19 +114,4 @@ fun quality(value: Double, min: Double, max: Double, higherIsBetter: Boolean): D
     val span = max - min
     val t = if (span < 1e-9) 0.5 else (value - min) / span
     return if (higherIsBetter) t else 1.0 - t
-}
-
-/** Red (worst) through yellow to green (best), returned as packed ARGB. */
-fun rampArgb(q: Double, alpha: Int = 255): Int {
-    val t = q.coerceIn(0.0, 1.0)
-    val r: Int
-    val g: Int
-    if (t < 0.5) {
-        r = 220
-        g = (40 + (215 - 40) * (t / 0.5)).toInt()
-    } else {
-        r = (220 - (220 - 40) * ((t - 0.5) / 0.5)).toInt()
-        g = 190
-    }
-    return (alpha shl 24) or (r shl 16) or (g shl 8) or 60
 }

@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.SystemClock
+import com.gridsense.core.widthMhzFromCode
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
@@ -16,7 +18,12 @@ data class Neighbour(
     val bssid: String,
     val ssid: String,
     val freqMhz: Int,
-    val rssiDbm: Int
+    val rssiDbm: Int,
+    val widthMhz: Int? = null,
+    /** Centre of the occupied block when wider than 20 MHz; null when not reported. */
+    val centerFreq0Mhz: Int? = null,
+    /** ScanResult.wifiStandard, Android 11 and later only. */
+    val wifiStandard: Int? = null
 )
 
 data class ScanOutcome(val neighbours: List<Neighbour>, val fresh: Boolean, val note: String)
@@ -94,7 +101,10 @@ class NeighbourScanner(context: Context) {
             bssid = it.BSSID ?: DUMMY_BSSID,
             ssid = it.SSID ?: "",
             freqMhz = it.frequency,
-            rssiDbm = it.level
+            rssiDbm = it.level,
+            widthMhz = widthMhzFromCode(it.channelWidth),
+            centerFreq0Mhz = it.centerFreq0.takeIf { f -> f > 0 },
+            wifiStandard = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) it.wifiStandard else null
         )
     }
 }

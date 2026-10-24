@@ -66,8 +66,7 @@ fun DrawScope.drawOutline(view: PlanView, polygonM: List<Pt>, color: Color, stro
 }
 
 /** Faint lines between the grid cells, so each node can be matched to a spot on the floor. */
-fun DrawScope.drawGridCells(view: PlanView, rows: Int, cols: Int, cellM: Double) {
-    val line = Color(0x33263238)
+fun DrawScope.drawGridCells(view: PlanView, rows: Int, cols: Int, cellM: Double, line: Color) {
     for (c in 1 until cols) {
         val x = c * cellM
         drawLine(line, view.screen(x, 0.0), view.screen(x, rows * cellM), strokeWidth = 1.5f)
@@ -78,8 +77,15 @@ fun DrawScope.drawGridCells(view: PlanView, rows: Int, cols: Int, cellM: Double)
     }
 }
 
-/** Router markers: a diamond plus its label. */
-fun DrawScope.drawRouterMarker(view: PlanView, x: Double, y: Double, radius: Float, color: Color) {
+/** Router markers: a diamond with a contrasting edge. */
+fun DrawScope.drawRouterMarker(
+    view: PlanView,
+    x: Double,
+    y: Double,
+    radius: Float,
+    color: Color,
+    edge: Color
+) {
     val c = view.screen(x, y)
     val path = Path()
     path.moveTo(c.x, c.y - radius)
@@ -88,5 +94,5 @@ fun DrawScope.drawRouterMarker(view: PlanView, x: Double, y: Double, radius: Flo
     path.lineTo(c.x - radius, c.y)
     path.close()
     drawPath(path, color)
-    drawPath(path, Color.White, style = Stroke(width = radius * 0.28f))
+    drawPath(path, edge, style = Stroke(width = radius * 0.28f))
 }

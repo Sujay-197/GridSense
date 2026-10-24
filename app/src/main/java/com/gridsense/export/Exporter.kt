@@ -30,11 +30,17 @@ fun baseName(room: SurveyRoom): String {
     return safe + "_" + stamp
 }
 
-fun writePng(context: Context, image: ImageBitmap, base: String): File {
-    val file = File(exportsDir(context), base + "_heatmap.png")
+fun writePng(context: Context, image: ImageBitmap, base: String, suffix: String = "_heatmap"): File {
+    val file = File(exportsDir(context), base + suffix + ".png")
     file.outputStream().use { out ->
         image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, out)
     }
+    return file
+}
+
+fun writeText(context: Context, name: String, text: String): File {
+    val file = File(exportsDir(context), name)
+    file.writeText(text)
     return file
 }
 
@@ -78,7 +84,9 @@ fun writeCsvs(
                     "kind", "bssid", "ssid", "freq_mhz", "rssi_dbm", "link_speed_mbps",
                     "cell_tech", "cell_dbm", "cell_level", "rsrp", "rsrq", "sinr",
                     "cell_id", "tac", "pci", "arfcn", "operator",
-                    "ping_host", "rtt_avg_ms", "rtt_jitter_ms", "rtt_loss_pct"
+                    "ping_host", "rtt_avg_ms", "rtt_jitter_ms", "rtt_loss_pct",
+                    "channel_width_mhz", "center_freq0_mhz", "wifi_standard",
+                    "probe_ms", "probe_ok", "bytes", "duration_ms", "target"
                 )
             )
         )
@@ -93,7 +101,9 @@ fun writeCsvs(
                         s.freqMhz, s.rssiDbm, s.linkSpeedMbps,
                         s.cellTech, s.cellDbm, s.cellLevel, s.rsrp, s.rsrq, s.sinr,
                         s.cellId, s.tac, s.pci, s.arfcn, s.operator,
-                        s.pingHost, s.rttAvgMs, s.rttJitterMs, s.rttLossPct
+                        s.pingHost, s.rttAvgMs, s.rttJitterMs, s.rttLossPct,
+                        s.channelWidthMhz, s.centerFreq0Mhz, s.wifiStandard,
+                        s.probeMs, s.probeOk, s.bytes, s.durationMs, s.target
                     )
                 )
             )
@@ -103,10 +113,10 @@ fun writeCsvs(
 
     val routersFile = File(exportsDir(context), base + "_routers.csv")
     routersFile.bufferedWriter().use { w ->
-        w.write(csvRow(listOf("router_id", "x_m", "y_m", "bssid", "label")))
+        w.write(csvRow(listOf("router_id", "x_m", "y_m", "bssid", "label", "height_diff_m")))
         w.newLine()
         for (r in routers) {
-            w.write(csvRow(listOf(r.id, r.x, r.y, r.bssid, r.label)))
+            w.write(csvRow(listOf(r.id, r.x, r.y, r.bssid, r.label, r.heightDiffM)))
             w.newLine()
         }
     }
@@ -147,6 +157,13 @@ fun writeJson(
         w.write("\"id\": " + room.id)
         w.write(", \"name\": " + jsonString(room.name))
         w.write(", \"mode\": " + jsonString(room.mode))
+        w.write(", \"condition\": " + jsonString(room.condition))
+        w.write(", \"extended_tests\": " + room.extendedTests)
+        w.write(", \"load_test\": " + room.loadTest)
+        w.write(", \"dns_name\": " + jsonString(room.dnsName))
+        w.write(", \"tcp_host\": " + jsonString(room.tcpHost))
+        w.write(", \"tcp_port\": " + room.tcpPort)
+        w.write(", \"download_url\": " + jsonString(room.downloadUrl))
         w.write(", \"grid_rows\": " + room.gridRows)
         w.write(", \"grid_cols\": " + room.gridCols)
         w.write(", \"cell_size_m\": " + room.cellSizeM)
@@ -192,7 +209,15 @@ fun writeJson(
                     ", \"ping_host\": " + jsonString(s.pingHost) +
                     ", \"rtt_avg_ms\": " + jsonNumber(s.rttAvgMs) +
                     ", \"rtt_jitter_ms\": " + jsonNumber(s.rttJitterMs) +
-                    ", \"rtt_loss_pct\": " + jsonNumber(s.rttLossPct) + "}"
+                    ", \"rtt_loss_pct\": " + jsonNumber(s.rttLossPct) +
+                    ", \"channel_width_mhz\": " + jsonNumber(s.channelWidthMhz) +
+                    ", \"center_freq0_mhz\": " + jsonNumber(s.centerFreq0Mhz) +
+                    ", \"wifi_standard\": " + jsonNumber(s.wifiStandard) +
+                    ", \"probe_ms\": " + jsonNumber(s.probeMs) +
+                    ", \"probe_ok\": " + jsonNumber(s.probeOk) +
+                    ", \"bytes\": " + jsonNumber(s.bytes) +
+                    ", \"duration_ms\": " + jsonNumber(s.durationMs) +
+                    ", \"target\": " + jsonString(s.target) + "}"
             )
             w.write(if (index == samples.lastIndex) "\n" else ",\n")
         }
@@ -203,7 +228,8 @@ fun writeJson(
             w.write(
                 "    {\"id\": " + r.id + ", \"x_m\": " + r.x + ", \"y_m\": " + r.y +
                     ", \"bssid\": " + jsonString(r.bssid) +
-                    ", \"label\": " + jsonString(r.label) + "}"
+                    ", \"label\": " + jsonString(r.label) +
+                    ", \"height_diff_m\": " + r.heightDiffM + "}"
             )
             w.write(if (index == routers.lastIndex) "\n" else ",\n")
         }
