@@ -1,6 +1,7 @@
 package com.gridsense.data
 
 import com.gridsense.core.Metric
+import com.gridsense.core.QualityLevel
 import com.gridsense.core.median
 import com.gridsense.core.nodeLabel
 import com.gridsense.core.qualityLevel
@@ -8,8 +9,15 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
 
+/** A headline value of a section with its place on the shared quality scale. */
+data class Rating(val label: String, val value: String, val level: QualityLevel)
+
 /** One titled block of the plain-language survey report. */
-data class InsightSection(val title: String, val lines: List<String>)
+data class InsightSection(
+    val title: String,
+    val lines: List<String>,
+    val ratings: List<Rating> = emptyList()
+)
 
 /** Below this, a node's Wi-Fi is usually not good enough for video calls or streaming. */
 const val WIFI_STREAMING_DBM = -67.0
@@ -173,7 +181,14 @@ private fun wifiCoverage(logged: List<GridPoint>, byPoint: Map<Long, List<Sample
 
     lines += "The heatmap colour scale stretches from the weakest node to the strongest, so red " +
         "means weakest in this room, not necessarily bad. Quote the dBm figures alongside it."
-    return InsightSection("Wi-Fi coverage", lines)
+    return InsightSection(
+        "Wi-Fi coverage",
+        lines,
+        listOf(
+            Rating("Median RSSI", "${num(overall)} dBm", qualityLevel(Metric.RSSI, overall)),
+            Rating("Weakest node", "${num(worst.value)} dBm", qualityLevel(Metric.RSSI, worst.value))
+        )
+    )
 }
 
 /** Compares the first and last row (or column) to suggest which side the router is on. */
@@ -269,6 +284,7 @@ private fun cellular(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
     val all = cells.values.flatten()
     val lines = ArrayList<String>()
 
+    val ratings = ArrayList<Rating>()
     val operator = all.mapNotNull { it.operator }.firstOrNull()
     val techs = all.mapNotNull { it.cellTech }.distinct()
     lines += "Serving network: " + (operator ?: "unknown operator") +
@@ -281,6 +297,7 @@ private fun cellular(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
         val worst = strength.minByOrNull { it.value }!!
         val best = strength.maxByOrNull { it.value }!!
         val overall = median(strength.values.toList())
+        ratings += Rating("Median RSRP", "${num(overall)} dBm", qualityLevel(Metric.CELL_RSRP, overall))
         lines += "Signal strength (RSRP) is ${num(worst.value)} to ${num(best.value)} dBm, median " +
             "${num(overall)}: ${rsrpBand(overall)} overall. Weakest at ${labelOf(worst.key)}, " +
             "strongest at ${labelOf(best.key)}."
@@ -289,6 +306,12 @@ private fun cellular(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
     val sinr = all.mapNotNull { it.sinr?.toDouble() }
     if (rsrq.isNotEmpty() || sinr.isNotEmpty()) {
         val parts = ArrayList<String>()
+        if (rsrq.isNotEmpty()) {
+            ratings += Rating("RSRQ", "${num(median(rsrq))} dB", qualityLevel(Metric.CELL_RSRQ, median(rsrq)))
+        }
+        if (sinr.isNotEmpty()) {
+            ratings += Rating("SINR", "${num(median(sinr))} dB", qualityLevel(Metric.CELL_SINR, median(sinr)))
+        }
         if (rsrq.isNotEmpty()) parts += "RSRQ ${num(median(rsrq))} dB (${rsrqBand(median(rsrq))})"
         if (sinr.isNotEmpty()) parts += "SINR ${num(median(sinr))} dB (${sinrBand(median(sinr))})"
         lines += "Signal quality: " + parts.joinToString(", ") + ". Quality says how clean the " +
@@ -302,7 +325,7 @@ private fun cellular(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
             "${switching.size} of ${cells.size} nodes. That is typical of a weak indoor signal " +
             "near the edge of two cells."
     }
-    return InsightSection("Cellular", lines)
+    return InsightSection("Cellular", lines, ratings)
 }
 
 private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): InsightSection? {
@@ -327,10 +350,12 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
         return InsightSection("Latency, jitter and loss", lines)
     }
 
+    val ratings = ArrayList<Rating>()
     lines += "Pinged ${hosts.joinToString(", ")}."
     val lat = answered.mapValues { it.value.rttAvgMs!! }
     val slow = lat.maxByOrNull { it.value }!!
     val latMedian = median(lat.values.toList())
+    ratings += Rating("Median latency", "${num(latMedian)} ms", qualityLevel(Metric.LATENCY, latMedian))
     lines += "Latency median ${num(latMedian)} ms, worst ${num(slow.value)} ms at " +
         "${labelOf(slow.key)}: " + when {
             latMedian <= 20 -> "low, fine for anything including gaming and calls."
@@ -340,6 +365,7 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
     val jitter = answered.values.mapNotNull { it.rttJitterMs }
     if (jitter.isNotEmpty()) {
         val j = median(jitter)
+        ratings += Rating("Median jitter", "${num(j)} ms", qualityLevel(Metric.JITTER, j))
         lines += "Jitter median ${num(j)} ms: " + when {
             j <= 5 -> "steady."
             j <= 30 -> "some variation, usually fine."
@@ -347,13 +373,17 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
         }
     }
     val lossy = pings.filterValues { (it.rttLossPct ?: 0.0) > 0 }
+    val worstLoss = answered.values.mapNotNull { it.rttLossPct }.maxOrNull()
+    if (worstLoss != null) {
+        ratings += Rating("Worst loss", "${num(worstLoss)} %", qualityLevel(Metric.LOSS, worstLoss))
+    }
     lines += if (lossy.isEmpty()) {
         "No packets were lost at any node."
     } else {
         "Packet loss at ${lossy.size} node${if (lossy.size == 1) "" else "s"}: " +
             lossy.entries.joinToString(", ") { "${labelOf(it.key)} ${num(it.value.rttLossPct!!)}%" } + "."
     }
-    return InsightSection("Latency, jitter and loss", lines)
+    return InsightSection("Latency, jitter and loss", lines, ratings)
 }
 
 private fun dataQuality(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): InsightSection? {

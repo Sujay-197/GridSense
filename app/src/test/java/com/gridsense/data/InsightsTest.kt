@@ -215,4 +215,24 @@ class InsightsTest {
         assertTrue(shared.startsWith("GridSense report: room1"))
         s.forEach { assertTrue(shared.contains("\n" + it.title + "\n")) }
     }
+
+    @Test
+    fun sectionsCarryRatingsOnTheSharedScale() {
+        val samples = wifi(listOf(-55, -58, -55, -54, -54, -54, -56, -52, -62)) +
+            grid.map { cell(it.id, -96, 1, rsrq = -11, sinr = 2) } +
+            grid.map { ping(it.id, "192.168.1.1", 4.0, 1.0, 0.0) }
+        val s = buildInsights(grid, samples)
+        val wifi = section(s, "Wi-Fi coverage")!!.ratings
+        assertEquals("Median RSSI", wifi[0].label)
+        assertEquals(com.gridsense.core.QualityLevel.VERY_GOOD, wifi[0].level)
+        assertEquals(com.gridsense.core.QualityLevel.GOOD, wifi[1].level)
+        val cellular = section(s, "Cellular")!!.ratings.associate { it.label to it.level }
+        assertEquals(com.gridsense.core.QualityLevel.FAIR, cellular["Median RSRP"])
+        assertEquals(com.gridsense.core.QualityLevel.FAIR, cellular["RSRQ"])
+        assertEquals(com.gridsense.core.QualityLevel.FAIR, cellular["SINR"])
+        val latency = section(s, "Latency, jitter and loss")!!.ratings.associate { it.label to it.level }
+        assertEquals(com.gridsense.core.QualityLevel.GOOD, latency["Median latency"])
+        assertEquals(com.gridsense.core.QualityLevel.GOOD, latency["Worst loss"])
+        assertTrue(section(s, "Overview")!!.ratings.isEmpty())
+    }
 }
