@@ -25,9 +25,12 @@ readings into a heatmap. No floor plan, GPS or location fix is needed.
    room's range; *Fixed* colours by quality band, so red always means poor. The top bar's
    share menu exports the PNG, the raw samples, nodes and routers as CSV or JSON, or the
    report as text.
-5. **Analysis.** Channel congestion from the neighbour scans: an occupancy chart per band with
-   your own networks highlighted, and a channel recommendation that only suggests a change when
-   it is at least 3 dB quieter. Path loss and latency analyses will join it.
+5. **Analysis.** A log-distance path-loss fit per router marker (exponent n, RSSI at 1 m,
+   shadowing σ, R²) on a log-distance scatter with a free-space reference, warning when too few
+   nodes or too short a distance span make n unreliable; and channel congestion from the
+   neighbour scans: an occupancy chart per band with your own networks highlighted, and a
+   channel recommendation that only suggests a change when it is at least 3 dB quieter. The
+   router dialog asks how far the router sits above the phone, for 3D distances.
 6. **Report.** A plain-language write-up of the survey, explained in [the next section](#the-report).
 
 ## The report
