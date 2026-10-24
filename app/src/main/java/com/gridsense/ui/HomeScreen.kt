@@ -38,7 +38,7 @@ fun HomeScreen(vm: SurveyViewModel) {
         topBar = { TopAppBar(title = { Text("GridSense") }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { vm.startLayout() },
+                onClick = { vm.startSetup() },
                 text = { Text("New survey") },
                 icon = {}
             )
@@ -54,7 +54,7 @@ fun HomeScreen(vm: SurveyViewModel) {
             ) {
                 Text("No rooms yet", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Create a survey, measure its outline with AR or enter the room size, then mark the points you want to log.",
+                    "Create a survey by splitting the room into a grid, then stand at each node and log it.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -78,9 +78,9 @@ fun HomeScreen(vm: SurveyViewModel) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(room.name, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                modeOf(room).label + " survey, " + room.samplesPerPoint +
-                                    " samples per point, outline " +
-                                    room.outlineSource.lowercase(),
+                                modeOf(room).label + " survey, " + room.gridRows + " x " +
+                                    room.gridCols + " grid, " + room.samplesPerPoint +
+                                    " samples per node",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }

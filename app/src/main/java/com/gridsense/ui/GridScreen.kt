@@ -54,10 +54,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gridsense.core.Metric
 import com.gridsense.core.Pt
+import com.gridsense.core.nodeLabel
 import com.gridsense.data.GridPoint
 import com.gridsense.data.KIND_CELL
 import com.gridsense.data.KIND_PING
-import com.gridsense.data.SOURCE_AR
 import com.gridsense.data.STATUS_DONE
 import com.gridsense.data.Sample
 import com.gridsense.data.decodePolygon
@@ -153,6 +153,7 @@ fun GridScreen(vm: SurveyViewModel, roomId: Long) {
             if (tab == 0) {
                 GridPane(
                     vm = vm,
+                    room = currentRoom,
                     polygon = polygon,
                     primaryMetric = primaryMetric,
                     points = points,
@@ -195,6 +196,7 @@ fun GridScreen(vm: SurveyViewModel, roomId: Long) {
 @Composable
 private fun GridPane(
     vm: SurveyViewModel,
+    room: com.gridsense.data.SurveyRoom,
     polygon: List<Pt>,
     primaryMetric: Metric,
     points: List<GridPoint>,
@@ -253,6 +255,7 @@ private fun GridPane(
             }
     ) {
         val view = fitPlan(polygon, size, padding = 28f)
+        drawGridCells(view, room.gridRows, room.gridCols, room.cellSizeM)
         drawOutline(view, polygon, Color(0xFF263238), 3f)
 
         for (p in points) {
@@ -320,7 +323,7 @@ private fun PointSheet(vm: SurveyViewModel, point: GridPoint, samples: List<Samp
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            "Point " + (point.seq + 1),
+            "Node " + nodeLabel(point.row, point.col),
             style = MaterialTheme.typography.titleMedium
         )
         Text(
@@ -328,8 +331,7 @@ private fun PointSheet(vm: SurveyViewModel, point: GridPoint, samples: List<Samp
             style = MaterialTheme.typography.bodySmall
         )
         Text(
-            "Status: " + point.status + ", placed " +
-                (if (point.source == SOURCE_AR) "by AR" else "by hand"),
+            "Row " + (point.row + 1) + ", column " + (point.col + 1) + ". Status: " + point.status,
             style = MaterialTheme.typography.bodySmall
         )
 

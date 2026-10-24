@@ -7,11 +7,10 @@ import android.location.LocationManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 
-/** Everything that has to be true before a point can be logged or AR tracking can run. */
+/** Everything that has to be true before a point can be logged. */
 data class Readiness(
     val locationPermissionGranted: Boolean,
     val nearbyWifiPermissionGranted: Boolean,
-    val cameraPermissionGranted: Boolean,
     val locationServicesOn: Boolean,
     val wifiIdentifiersReadable: Boolean,
     val cellularReadable: Boolean
@@ -24,8 +23,7 @@ data class Readiness(
 
 fun requiredPermissions(): Array<String> {
     val permissions = mutableListOf(
-        Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.CAMERA
+        Manifest.permission.ACCESS_FINE_LOCATION
     )
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
@@ -47,7 +45,6 @@ fun readReadiness(context: Context): Readiness {
     return Readiness(
         locationPermissionGranted = granted(context, Manifest.permission.ACCESS_FINE_LOCATION),
         nearbyWifiPermissionGranted = nearby,
-        cameraPermissionGranted = granted(context, Manifest.permission.CAMERA),
         locationServicesOn = locationManager.isLocationEnabled,
         wifiIdentifiersReadable = identifiersReadable(readLink(context)),
         cellularReadable = readCell(context) != null

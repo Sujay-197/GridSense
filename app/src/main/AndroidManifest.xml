@@ -8,17 +8,12 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Used only by ARCore for motion tracking. No image is stored. -->
-    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission
         android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="33" />
 
     <uses-feature android:name="android.hardware.wifi" android:required="true" />
-    <!-- AR is optional: without it every position can be placed by hand. -->
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -26,7 +21,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GridSense">
 
-        <meta-data android:name="com.google.ar.core" android:value="optional" />
 
         <activity
             android:name=".MainActivity"

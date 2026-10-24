@@ -45,74 +45,41 @@ class CoreTest {
         assertEquals(6.0, b.height, 1e-9)
     }
 
-    // --- AR room frame -----------------------------------------------------
+    // --- grid -------------------------------------------------------------
 
-    private fun near(expected: Pt, actual: Pt) {
-        assertEquals(expected.x, actual.x, 1e-9)
-        assertEquals(expected.y, actual.y, 1e-9)
+    @Test
+    fun everyCellGetsOneNodeAtItsCentre() {
+        val nodes = gridNodes(rows = 3, cols = 4, cellM = 1.0)
+        assertEquals(12, nodes.size)
+        assertEquals(GridNode(0, 0, 0.5, 0.5), nodes.first())
+        assertEquals(GridNode(2, 3, 3.5, 2.5), nodes.last())
     }
 
     @Test
-    fun theFirstCornerIsTheOriginAndTheSecondLiesOnPlusY() {
-        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -4.0)!!
-        near(Pt(0.0, 0.0), frame.toRoom(0.0, 0.0))
-        near(Pt(0.0, 4.0), frame.toRoom(0.0, -4.0))
+    fun cellSizeScalesPositions() {
+        val node = gridNodes(rows = 2, cols = 2, cellM = 1.2)[3]
+        assertEquals(1.8, node.x, 1e-9)
+        assertEquals(1.8, node.y, 1e-9)
     }
 
     @Test
-    fun theRoomsPlusXIsToTheRightOfTheWall() {
-        // A wall running along -z has +x on its right in a y-up right-handed world.
-        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -4.0)!!
-        near(Pt(1.5, 0.0), frame.toRoom(1.5, 0.0))
+    fun nodesAreRowMajorFromA1() {
+        val nodes = gridNodes(rows = 2, cols = 3, cellM = 1.0)
+        assertEquals(listOf("A1", "B1", "C1", "A2", "B2", "C2"), nodes.map { nodeLabel(it.row, it.col) })
     }
 
     @Test
-    fun theFrameFollowsTheWallWhereverItIsInArCoresWorld() {
-        // A wall running along +x from (10, 5) has +z on its right.
-        val frame = RoomFrame.alongWall(10.0, 5.0, 13.0, 5.0)!!
-        near(Pt(0.0, 3.0), frame.toRoom(13.0, 5.0))
-        near(Pt(2.0, 0.0), frame.toRoom(10.0, 7.0))
+    fun columnLabelsCarryPastZ() {
+        assertEquals("Z1", nodeLabel(0, 25))
+        assertEquals("AA1", nodeLabel(0, 26))
     }
 
     @Test
-    fun aDiagonalWallKeepsItsTrueLength() {
-        val frame = RoomFrame.alongWall(1.0, 1.0, 4.0, 5.0)!!
-        near(Pt(0.0, 5.0), frame.toRoom(4.0, 5.0))
-    }
-
-    @Test
-    fun cornersTooCloseTogetherGiveNoFrame() {
-        assertEquals(null, RoomFrame.alongWall(0.0, 0.0, 0.1, 0.1))
-    }
-
-    @Test
-    fun reanchoringMapsTheCurrentPositionOntoTheTappedOne() {
-        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -1.0)!!
-        // ARCore thinks you are at room (1, 4); you tap (1.3, 3.8) because it drifted.
-        val anchored = frame.anchoredAt(1.0, -4.0, Pt(1.3, 3.8))
-        near(Pt(1.3, 3.8), anchored.toRoom(1.0, -4.0))
-        // Everything after is shifted by the same amount.
-        near(Pt(2.3, 4.8), anchored.toRoom(2.0, -5.0))
-    }
-
-    @Test
-    fun reanchoringTwiceDoesNotStackOffsets() {
-        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -1.0)!!
-            .anchoredAt(0.0, -1.0, Pt(5.0, 5.0))
-            .anchoredAt(0.0, -1.0, Pt(0.0, 1.0))
-        near(Pt(0.0, 1.0), frame.toRoom(0.0, -1.0))
-    }
-
-    @Test
-    fun headingIsMeasuredClockwiseFromPlusY() {
-        val frame = RoomFrame.alongWall(0.0, 0.0, 0.0, -1.0)!!
-        assertEquals(0.0, frame.headingOf(0.0, -1.0), 1e-9)
-        assertEquals(Math.PI / 2, frame.headingOf(1.0, 0.0), 1e-9)
-    }
-
-    @Test
-    fun closureErrorIsTheDistanceBackToTheOrigin() {
-        assertEquals(5.0, distance(Pt(0.0, 0.0), Pt(3.0, 4.0)), 1e-9)
+    fun theOutlineContainsEveryNode() {
+        val outline = gridOutline(rows = 3, cols = 5, cellM = 0.6)
+        assertTrue(gridNodes(3, 5, 0.6).all { pointInPolygon(outline, Pt(it.x, it.y)) })
+        assertEquals(3.0, boundsOf(outline).width, 1e-9)
+        assertEquals(1.8, boundsOf(outline).height, 1e-9)
     }
 
     // --- statistics --------------------------------------------------------

@@ -20,7 +20,7 @@ import com.gridsense.ui.GridScreen
 import com.gridsense.ui.HomeScreen
 import com.gridsense.ui.PermissionScreen
 import com.gridsense.ui.Screen
-import com.gridsense.ui.LayoutScreen
+import com.gridsense.ui.SetupScreen
 import com.gridsense.ui.SurveyViewModel
 
 class MainActivity : ComponentActivity() {
@@ -45,10 +45,7 @@ fun AppRoot(vm: SurveyViewModel = viewModel()) {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                vm.refreshReadiness()
-                vm.refreshArStatus()
-            }
+            if (event == Lifecycle.Event.ON_RESUME) vm.refreshReadiness()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -66,7 +63,7 @@ fun AppRoot(vm: SurveyViewModel = viewModel()) {
 
     when (val screen = vm.screen) {
         is Screen.Home -> HomeScreen(vm)
-        is Screen.Layout -> LayoutScreen(vm)
+        is Screen.Setup -> SetupScreen(vm)
         is Screen.Survey -> GridScreen(vm, screen.roomId)
     }
 }

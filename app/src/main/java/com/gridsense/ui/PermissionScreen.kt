@@ -53,15 +53,8 @@ fun PermissionScreen(
         )
 
         Text(
-            "GridSense never requests a location fix and never uses GPS. Your position comes " +
-                "from ARCore tracking the camera image, starting at a corner you choose, or " +
-                "from you placing it on the plan by hand.",
-            style = MaterialTheme.typography.bodyMedium
-        )
-
-        Text(
-            "The camera is only used for AR tracking. No images are stored or sent anywhere, " +
-                "and without it you can still place every point by hand.",
+            "GridSense never requests a location fix and never uses GPS. Positions come from " +
+                "the grid you lay over the room yourself.",
             style = MaterialTheme.typography.bodyMedium
         )
 
@@ -72,7 +65,6 @@ fun PermissionScreen(
             ) {
                 StatusLine("Location permission granted", readiness.locationPermissionGranted)
                 StatusLine("Nearby Wi-Fi permission granted", readiness.nearbyWifiPermissionGranted)
-                StatusLine("Camera permission granted", readiness.cameraPermissionGranted)
                 StatusLine("Location services switched on", readiness.locationServicesOn)
                 StatusLine("Wi-Fi identifiers readable", readiness.wifiIdentifiersReadable)
                 StatusLine("Serving cell readable", readiness.cellularReadable)
@@ -80,8 +72,7 @@ fun PermissionScreen(
         }
 
         if (!readiness.locationPermissionGranted ||
-            !readiness.nearbyWifiPermissionGranted ||
-            !readiness.cameraPermissionGranted
+            !readiness.nearbyWifiPermissionGranted
         ) {
             Button(onClick = onGrant, modifier = Modifier.fillMaxWidth()) {
                 Text("Grant permission")

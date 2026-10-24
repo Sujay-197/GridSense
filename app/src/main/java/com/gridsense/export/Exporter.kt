@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.core.content.FileProvider
+import com.gridsense.core.nodeLabel
 import com.gridsense.data.GridPoint
 import com.gridsense.data.Router
 import com.gridsense.data.Sample
@@ -60,10 +61,10 @@ fun writeCsvs(
 
     val pointsFile = File(exportsDir(context), base + "_points.csv")
     pointsFile.bufferedWriter().use { w ->
-        w.write(csvRow(listOf("point_id", "seq", "x_m", "y_m", "source", "enabled", "status")))
+        w.write(csvRow(listOf("point_id", "node", "row", "col", "x_m", "y_m", "enabled", "status")))
         w.newLine()
         for (p in points) {
-            w.write(csvRow(listOf(p.id, p.seq, p.x, p.y, p.source, p.enabled, p.status)))
+            w.write(csvRow(listOf(p.id, nodeLabel(p.row, p.col), p.row, p.col, p.x, p.y, p.enabled, p.status)))
             w.newLine()
         }
     }
@@ -73,7 +74,7 @@ fun writeCsvs(
         w.write(
             csvRow(
                 listOf(
-                    "sample_id", "point_id", "seq", "x_m", "y_m", "position_source", "ts_epoch_ms",
+                    "sample_id", "point_id", "node", "row", "col", "x_m", "y_m", "ts_epoch_ms",
                     "kind", "bssid", "ssid", "freq_mhz", "rssi_dbm", "link_speed_mbps",
                     "cell_tech", "cell_dbm", "cell_level", "rsrp", "rsrq", "sinr",
                     "cell_id", "tac", "pci", "arfcn", "operator",
@@ -87,7 +88,8 @@ fun writeCsvs(
             w.write(
                 csvRow(
                     listOf(
-                        s.id, s.pointId, p?.seq, p?.x, p?.y, p?.source, s.ts, s.kind, s.bssid, s.ssid,
+                        s.id, s.pointId, p?.let { nodeLabel(it.row, it.col) }, p?.row, p?.col,
+                        p?.x, p?.y, s.ts, s.kind, s.bssid, s.ssid,
                         s.freqMhz, s.rssiDbm, s.linkSpeedMbps,
                         s.cellTech, s.cellDbm, s.cellLevel, s.rsrp, s.rsrq, s.sinr,
                         s.cellId, s.tac, s.pci, s.arfcn, s.operator,
@@ -145,10 +147,11 @@ fun writeJson(
         w.write("\"id\": " + room.id)
         w.write(", \"name\": " + jsonString(room.name))
         w.write(", \"mode\": " + jsonString(room.mode))
-        w.write(", \"outline_source\": " + jsonString(room.outlineSource))
+        w.write(", \"grid_rows\": " + room.gridRows)
+        w.write(", \"grid_cols\": " + room.gridCols)
+        w.write(", \"cell_size_m\": " + room.cellSizeM)
         w.write(", \"samples_per_point\": " + room.samplesPerPoint)
         w.write(", \"ping_host\": " + jsonString(room.pingHost))
-        w.write(", \"closure_error_m\": " + jsonNumber(room.closureErrorM))
         w.write(", \"polygon_m\": " + jsonString(room.polygon))
         w.write(", \"created_at\": " + room.createdAt)
         w.write("},\n")
@@ -156,9 +159,9 @@ fun writeJson(
         w.write("  \"points\": [\n")
         points.forEachIndexed { index, p ->
             w.write(
-                "    {\"id\": " + p.id + ", \"seq\": " + p.seq +
+                "    {\"id\": " + p.id + ", \"node\": " + jsonString(nodeLabel(p.row, p.col)) +
+                    ", \"row\": " + p.row + ", \"col\": " + p.col +
                     ", \"x_m\": " + p.x + ", \"y_m\": " + p.y +
-                    ", \"source\": " + jsonString(p.source) +
                     ", \"enabled\": " + p.enabled + ", \"status\": " + jsonString(p.status) + "}"
             )
             w.write(if (index == points.lastIndex) "\n" else ",\n")

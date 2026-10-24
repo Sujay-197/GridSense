@@ -65,13 +65,17 @@ fun DrawScope.drawOutline(view: PlanView, polygonM: List<Pt>, color: Color, stro
     drawPath(path, color, style = Stroke(width = strokeWidth))
 }
 
-/** The breadcrumb of the walk, drawn faintly so drift is visible. */
-fun DrawScope.drawTrace(view: PlanView, trace: List<Pt>, color: Color) {
-    if (trace.size < 2) return
-    val path = Path()
-    path.moveTo(view.sx(trace[0].x), view.sy(trace[0].y))
-    for (i in 1 until trace.size) path.lineTo(view.sx(trace[i].x), view.sy(trace[i].y))
-    drawPath(path, color, style = Stroke(width = 2f))
+/** Faint lines between the grid cells, so each node can be matched to a spot on the floor. */
+fun DrawScope.drawGridCells(view: PlanView, rows: Int, cols: Int, cellM: Double) {
+    val line = Color(0x33263238)
+    for (c in 1 until cols) {
+        val x = c * cellM
+        drawLine(line, view.screen(x, 0.0), view.screen(x, rows * cellM), strokeWidth = 1.5f)
+    }
+    for (r in 1 until rows) {
+        val y = r * cellM
+        drawLine(line, view.screen(0.0, y), view.screen(cols * cellM, y), strokeWidth = 1.5f)
+    }
 }
 
 /** Router markers: a diamond plus its label. */
@@ -85,19 +89,4 @@ fun DrawScope.drawRouterMarker(view: PlanView, x: Double, y: Double, radius: Flo
     path.close()
     drawPath(path, color)
     drawPath(path, Color.White, style = Stroke(width = radius * 0.28f))
-}
-
-/** The live position while walking: a dot with a heading whisker. */
-fun DrawScope.drawWalker(view: PlanView, position: Pt, headingRad: Double, color: Color) {
-    val c = view.screen(position)
-    drawCircle(color, radius = 9f, center = c)
-    drawCircle(Color.White, radius = 9f, center = c, style = Stroke(2f))
-    val dx = kotlin.math.sin(headingRad).toFloat()
-    val dy = kotlin.math.cos(headingRad).toFloat()
-    drawLine(
-        color = color,
-        start = c,
-        end = Offset(c.x + dx * 26f, c.y - dy * 26f),
-        strokeWidth = 3f
-    )
 }

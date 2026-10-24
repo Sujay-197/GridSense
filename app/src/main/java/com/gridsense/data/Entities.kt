@@ -10,15 +10,6 @@ const val STATUS_PENDING = "PENDING"
 const val STATUS_LOGGING = "LOGGING"
 const val STATUS_DONE = "DONE"
 
-/** Position placed by ARCore tracking. */
-const val SOURCE_AR = "AR"
-
-/** Position typed in, tapped on the plan, or dragged there by hand. */
-const val SOURCE_MANUAL = "MANUAL"
-
-/** An outline walked with ARCore whose corners were then corrected by hand. */
-const val SOURCE_MIXED = "MIXED"
-
 /** A row written once per 500 ms poll of the Wi-Fi connection info. */
 const val KIND_LINK = "LINK"
 
@@ -45,13 +36,10 @@ data class SurveyRoom(
     val pingHost: String?,
     /** Outline corners in metres, encoded as "x,y;x,y;...", origin at the starting corner. */
     val polygon: String,
-    /** AR, MANUAL or MIXED: how the outline corners were obtained. */
-    val outlineSource: String,
-    /**
-     * How far ARCore put you from the origin corner when you closed an AR outline walk, which
-     * is the drift over the loop. Null when the outline was entered by hand or tracking was lost.
-     */
-    val closureErrorM: Double?,
+    val gridRows: Int,
+    val gridCols: Int,
+    /** Side of one grid cell in metres. Only sets the scale of the map. */
+    val cellSizeM: Double,
     val createdAt: Long
 )
 
@@ -68,13 +56,13 @@ data class SurveyRoom(
 data class GridPoint(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val roomId: Long,
-    /** The order in which the point was marked during the walk. */
+    /** Position in the grid, row-major from cell A1. */
     val seq: Int,
-    /** Metres from the origin corner. */
+    val row: Int,
+    val col: Int,
+    /** Metres from the origin corner, at the centre of the cell. */
     val x: Double,
     val y: Double,
-    /** AR or MANUAL: whether ARCore placed this point or you did. */
-    val source: String,
     val enabled: Boolean,
     val status: String
 )
