@@ -296,6 +296,13 @@ private fun cellular(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
     return InsightSection("Cellular", lines, ratings)
 }
 
+/** Enabled, logged nodes: the only ones any analysis looks at. */
+fun loggedNodes(points: List<GridPoint>) = points.filter { it.enabled && it.status == STATUS_DONE }
+
+/** The report's Channels section on its own, for the Analysis tab. */
+fun channelInsights(points: List<GridPoint>, samples: List<Sample>): InsightSection? =
+    channels(loggedNodes(points), samples.groupBy { it.pointId })
+
 /** The caveat every channel finding carries. */
 const val CHANNEL_CAVEAT = "A phone scan is a snapshot of beacons: it shows how strong neighbours " +
     "are, not how busy they are. Real airtime use can't be measured without monitor mode."
@@ -313,6 +320,7 @@ private fun channels(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
     val own = nets.count { it.own }
     lines += "Heard ${nets.size} access point${if (nets.size == 1) "" else "s"}: " +
         "${nets.count { it.band24 }} on 2.4 GHz and ${nets.count { it.band5 }} on 5 GHz" +
+        nets.count { it.freqMhz >= 5925 }.let { if (it > 0) " (plus $it on 6 GHz)" else "" } +
         (if (own > 0) ", $own of them your own router's" else "") + "."
 
     if (scans.isNotEmpty() && links.isNotEmpty()) {

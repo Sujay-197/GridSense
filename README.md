@@ -25,7 +25,10 @@ readings into a heatmap. No floor plan, GPS or location fix is needed.
    room's range; *Fixed* colours by quality band, so red always means poor. The top bar's
    share menu exports the PNG, the raw samples, nodes and routers as CSV or JSON, or the
    report as text.
-5. **Report.** A plain-language write-up of the survey, explained in [the next section](#the-report).
+5. **Analysis.** Channel congestion from the neighbour scans: an occupancy chart per band with
+   your own networks highlighted, and a channel recommendation that only suggests a change when
+   it is at least 3 dB quieter. Path loss and latency analyses will join it.
+6. **Report.** A plain-language write-up of the survey, explained in [the next section](#the-report).
 
 ## The report
 

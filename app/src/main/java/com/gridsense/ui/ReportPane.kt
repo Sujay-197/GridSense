@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Summarize
@@ -31,6 +32,7 @@ private fun sectionIcon(title: String): ImageVector = when (title) {
     "Overview" -> Icons.Filled.Summarize
     "Wi-Fi coverage" -> Icons.Filled.Wifi
     "Bands and neighbours" -> Icons.Filled.Router
+    "Channels" -> Icons.Filled.SettingsInputAntenna
     "Cellular" -> Icons.Filled.SignalCellularAlt
     "Latency, jitter and loss" -> Icons.Filled.Speed
     "Data quality" -> Icons.Filled.WarningAmber

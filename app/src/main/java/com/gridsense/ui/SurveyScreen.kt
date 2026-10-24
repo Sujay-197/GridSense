@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -64,6 +65,7 @@ import kotlinx.coroutines.withContext
 private enum class SurveyTab(val label: String, val icon: ImageVector) {
     GRID("Grid", Icons.Filled.GridOn),
     HEATMAP("Heatmap", Icons.Filled.Layers),
+    ANALYSIS("Analysis", Icons.Filled.Analytics),
     REPORT("Report", Icons.Filled.Description)
 }
 
@@ -237,6 +239,7 @@ fun SurveyScreen(
                     }
                 )
                 SurveyTab.HEATMAP -> HeatmapPane(vm, currentRoom, polygon, points, samples, routers, textMeasurer)
+                SurveyTab.ANALYSIS -> AnalysisPane(points, samples, textMeasurer)
                 SurveyTab.REPORT -> ReportPane(points, samples)
             }
         }

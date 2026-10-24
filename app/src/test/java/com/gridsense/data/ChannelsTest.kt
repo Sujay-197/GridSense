@@ -209,4 +209,17 @@ class ChannelsTest {
         assertNull(sections.firstOrNull { it.title == "Bands and neighbours" })
         assertTrue(sections.any { it.title == "Channels" })
     }
+
+    @Test
+    fun occupancyCountsEachBand() {
+        val samples = links() +
+            scan(1, "A", "4c:ae:00:00:00:01", 2462, -70) +
+            scan(1, "B", "4c:ae:00:00:00:02", 5180, -70) +
+            scan(1, "C", "4c:ae:00:00:00:03", 5955, -80)
+        val text = buildInsights(grid, samples).single { it.title == "Channels" }.lines.first()
+        assertEquals(
+            "Heard 4 access points: 2 on 2.4 GHz and 1 on 5 GHz (plus 1 on 6 GHz), 1 of them your own router's.",
+            text
+        )
+    }
 }
