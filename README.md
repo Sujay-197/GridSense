@@ -23,6 +23,14 @@ readings into a heatmap. No floor plan, GPS or location fix is needed.
    quantities, latency, jitter and loss, filter by BSSID, and show or hide the routers. Export
    the PNG, or the raw samples, nodes and routers as CSV or JSON.
 
+5. **Report.** A plain-language write-up of the survey, worked out from the logged samples
+   with fixed rules, so the same data always gives the same text. It rates Wi-Fi and cellular
+   against common thresholds (-67 dBm for streaming, RSRP/RSRQ/SINR bands), names the weakest
+   and strongest nodes, says whether the node-to-node spread is bigger than measurement noise
+   and which side the router is probably on, points out an unused 5 GHz band, overlapping
+   neighbours and hidden networks, notices tower switching, explains failed pings, and flags
+   cached scans. *Share report as text* sends it to any app for pasting into a write-up.
+
 ## What is measured at each point
 
 | Quantity | Source |

@@ -117,6 +117,7 @@ fun GridScreen(vm: SurveyViewModel, roomId: Long) {
             TabRow(selectedTabIndex = tab) {
                 Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Grid") })
                 Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Heatmap") })
+                Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Report") })
             }
 
             val note = vm.note
@@ -165,7 +166,7 @@ fun GridScreen(vm: SurveyViewModel, roomId: Long) {
                         vm.startLogging(it)
                     }
                 )
-            } else {
+            } else if (tab == 1) {
                 HeatmapPane(
                     vm = vm,
                     room = currentRoom,
@@ -174,6 +175,8 @@ fun GridScreen(vm: SurveyViewModel, roomId: Long) {
                     samples = samples,
                     routers = routers
                 )
+            } else {
+                ReportPane(room = currentRoom, points = points, samples = samples)
             }
         }
     }
