@@ -37,6 +37,9 @@ interface SurveyDao {
     @Query("SELECT * FROM sample WHERE kind IN ('LINK', 'CELL')")
     fun signalSamples(): Flow<List<Sample>>
 
+    @Query("SELECT name FROM survey_room")
+    suspend fun roomNames(): List<String>
+
     @Query("SELECT * FROM survey_room ORDER BY createdAt DESC")
     fun rooms(): Flow<List<SurveyRoom>>
 

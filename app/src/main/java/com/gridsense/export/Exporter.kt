@@ -149,6 +149,7 @@ fun writeJson(
         w.write("\"id\": " + room.id)
         w.write(", \"name\": " + jsonString(room.name))
         w.write(", \"mode\": " + jsonString(room.mode))
+        w.write(", \"condition\": " + jsonString(room.condition))
         w.write(", \"grid_rows\": " + room.gridRows)
         w.write(", \"grid_cols\": " + room.gridCols)
         w.write(", \"cell_size_m\": " + room.cellSizeM)

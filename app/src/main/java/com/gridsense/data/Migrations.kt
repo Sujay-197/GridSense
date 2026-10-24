@@ -33,4 +33,10 @@ val MIGRATION_6_7 = AddColumns(
     listOf("ALTER TABLE router ADD COLUMN heightDiffM REAL NOT NULL DEFAULT 0")
 )
 
-val ALL_MIGRATIONS: Array<AddColumns> = arrayOf(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+/** The experimental condition of a survey, such as "door closed", for comparisons. */
+val MIGRATION_7_8 = AddColumns(
+    7, 8,
+    listOf("ALTER TABLE survey_room ADD COLUMN condition TEXT NOT NULL DEFAULT ''")
+)
+
+val ALL_MIGRATIONS: Array<AddColumns> = arrayOf(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)

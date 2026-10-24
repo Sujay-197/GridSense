@@ -41,7 +41,10 @@ data class SurveyRoom(
     val gridCols: Int,
     /** Side of one grid cell in metres. Only sets the scale of the map. */
     val cellSizeM: Double,
-    val createdAt: Long
+    val createdAt: Long,
+    /** The experimental condition, such as "door closed" or "router by the window". */
+    @ColumnInfo(defaultValue = "")
+    val condition: String = ""
 )
 
 @Entity(

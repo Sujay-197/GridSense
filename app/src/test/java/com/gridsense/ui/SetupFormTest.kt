@@ -42,4 +42,11 @@ class SetupFormTest {
         assertEquals("Give the survey a name", valid.copy(name = " ", rows = "0").blocker)
         assertEquals("Rows: Use 1 to 20", valid.copy(rows = "0", cell = "0").blocker)
     }
+
+    @Test
+    fun duplicateNamesCountUp() {
+        assertEquals("Bedroom (2)", duplicateName("Bedroom", listOf("Bedroom")))
+        assertEquals("Bedroom (3)", duplicateName("Bedroom", listOf("Bedroom", "Bedroom (2)")))
+        assertEquals("Bedroom (3)", duplicateName("Bedroom (2)", listOf("Bedroom", "Bedroom (2)")))
+    }
 }

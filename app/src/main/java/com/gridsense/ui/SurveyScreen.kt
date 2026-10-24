@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -85,6 +86,7 @@ fun SurveyScreen(
     roomId: Long,
     onBack: () -> Unit,
     onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
     onFixPermissions: () -> Unit
 ) {
     LaunchedEffect(roomId) { vm.openRoom(roomId) }
@@ -134,7 +136,10 @@ fun SurveyScreen(
 
     ScreenScaffold(
         title = currentRoom?.name ?: "",
-        subtitle = currentRoom?.let { "$done of ${active.size} nodes · " + modeOf(it).label },
+        subtitle = currentRoom?.let {
+            "$done of ${active.size} nodes · " + modeOf(it).label +
+                if (it.condition.isNotBlank()) " · " + it.condition else ""
+        },
         onBack = onBack,
         snackbarHostState = snackbar,
         actions = {
@@ -169,6 +174,10 @@ fun SurveyScreen(
                     MenuItem("Edit details", Icons.Filled.Edit) {
                         overflowMenu = false
                         onEdit()
+                    }
+                    MenuItem("Duplicate", Icons.Filled.ContentCopy) {
+                        overflowMenu = false
+                        onDuplicate()
                     }
                     MenuItem("Delete survey", Icons.Filled.Delete) {
                         overflowMenu = false

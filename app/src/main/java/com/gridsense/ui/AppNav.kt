@@ -21,10 +21,11 @@ import com.gridsense.net.requiredPermissions
 object Routes {
     const val HOME = "home"
     const val PERMISSIONS = "permissions"
-    const val SETUP = "setup?editId={editId}"
+    const val SETUP = "setup?editId={editId}&copyOf={copyOf}"
     const val SURVEY = "survey/{id}"
 
     fun setup(editId: Long? = null) = if (editId == null) "setup" else "setup?editId=$editId"
+    fun duplicate(id: Long) = "setup?copyOf=$id"
     fun survey(id: Long) = "survey/$id"
 }
 
@@ -77,12 +78,16 @@ fun AppNav() {
                 vm = vm,
                 onNew = { nav.navigate(Routes.setup()) },
                 onOpen = { nav.navigate(Routes.survey(it)) },
+                onDuplicate = { nav.navigate(Routes.duplicate(it)) },
                 onPermissions = { nav.navigate(Routes.PERMISSIONS) }
             )
         }
         composable(
             Routes.SETUP,
-            arguments = listOf(navArgument("editId") { type = NavType.LongType; defaultValue = -1L })
+            arguments = listOf(
+                navArgument("editId") { type = NavType.LongType; defaultValue = -1L },
+                navArgument("copyOf") { type = NavType.LongType; defaultValue = -1L }
+            )
         ) {
             val setupVm: SetupViewModel = viewModel()
             SetupScreen(
@@ -107,6 +112,7 @@ fun AppNav() {
                 roomId = id,
                 onBack = { nav.popBackStack() },
                 onEdit = { nav.navigate(Routes.setup(id)) },
+                onDuplicate = { nav.navigate(Routes.duplicate(id)) },
                 onFixPermissions = { nav.navigate(Routes.PERMISSIONS) }
             )
         }

@@ -58,7 +58,11 @@ fun SetupScreen(vm: SetupViewModel, onClose: () -> Unit, onSaved: (Long) -> Unit
     BackHandler(enabled = vm.dirty) { confirmDiscard = true }
 
     ScreenScaffold(
-        title = if (vm.editing) "Edit details" else "New survey",
+        title = when {
+            vm.editing -> "Edit details"
+            vm.duplicating -> "Duplicate survey"
+            else -> "New survey"
+        },
         onBack = leave
     ) { padding ->
         if (!vm.loaded) return@ScreenScaffold
@@ -82,13 +86,26 @@ fun SetupScreen(vm: SetupViewModel, onClose: () -> Unit, onSaved: (Long) -> Unit
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = form.condition,
+                    onValueChange = { v -> vm.update { copy(condition = v) } },
+                    label = { Text("Condition (optional)") },
+                    placeholder = { Text("e.g. door closed, router on the shelf") },
+                    supportingText = {
+                        Text("What was set up this way for this survey. Two surveys with the same condition are treated as a repeatability pair when compared.")
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             SectionCard(title = "Grid", icon = Icons.Filled.GridOn) {
-                if (vm.editing) {
+                if (vm.gridLocked) {
                     Text(
-                        form.rows + " rows x " + form.cols + " columns, " + form.cell +
-                            " m cells. The grid can't change once nodes exist.",
+                        form.rows + " rows x " + form.cols + " columns, " + form.cell + " m cells. " +
+                            if (vm.editing) "The grid can't change once nodes exist."
+                            else "A duplicate keeps the grid so the two surveys can be compared node by node.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {
@@ -188,6 +205,13 @@ fun SetupScreen(vm: SetupViewModel, onClose: () -> Unit, onSaved: (Long) -> Unit
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
             ) { Text(if (vm.editing) "Save" else "Create grid and start") }
+            if (vm.duplicating) {
+                Text(
+                    "All nodes start pending. Router markers are not copied, since moving the router is a common experiment.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (blocker != null) {
                 Text(
                     blocker,

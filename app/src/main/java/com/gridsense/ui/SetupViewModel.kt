@@ -19,9 +19,18 @@ import kotlinx.coroutines.launch
 
 const val MAX_CELLS_PER_SIDE = 20
 
+/** "Bedroom" becomes "Bedroom (2)", or the next number not already taken. */
+fun duplicateName(name: String, taken: Collection<String>): String {
+    val base = name.replace(Regex("""\s\(\d+\)$"""), "")
+    var i = 2
+    while ("$base ($i)" in taken) i++
+    return "$base ($i)"
+}
+
 /** Everything the setup form edits, as typed. */
 data class SetupForm(
     val name: String = "",
+    val condition: String = "",
     val mode: SurveyMode = SurveyMode.WIFI,
     val pingHost: String = "",
     val samples: String = "10",
@@ -53,7 +62,8 @@ data class SetupForm(
 
 /**
  * The setup destination's own state. With an `editId` argument it edits that survey's details;
- * the grid is fixed once nodes exist, so only the survey and radio fields change.
+ * the grid is fixed once nodes exist, so only the survey and radio fields change. With `copyOf`
+ * it starts a new survey on the same grid and settings, so the two can be compared node by node.
  */
 class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewModel(app) {
 
@@ -62,10 +72,16 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
     val editId: Long? = saved.get<Long>("editId")?.takeIf { it > 0 }
     val editing get() = editId != null
 
+    val copyOf: Long? = saved.get<Long>("copyOf")?.takeIf { it > 0 }
+    val duplicating get() = copyOf != null
+
+    /** The grid can only be typed in for a brand-new survey. */
+    val gridLocked get() = editing || duplicating
+
     var form by mutableStateOf(SetupForm())
     private var initial = SetupForm()
 
-    var loaded by mutableStateOf(editId == null)
+    var loaded by mutableStateOf(editId == null && copyOf == null)
         private set
 
     val dirty get() = form != initial
@@ -73,13 +89,16 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
     private var editedRoom: SurveyRoom? = null
 
     init {
-        if (editId != null) {
+        val sourceId = editId ?: copyOf
+        if (sourceId != null) {
             viewModelScope.launch {
-                val r = dao.roomNow(editId)
+                val r = dao.roomNow(sourceId)
                 if (r != null) {
-                    editedRoom = r
+                    if (editing) editedRoom = r
+                    val names = dao.roomNames()
                     val f = SetupForm(
-                        name = r.name,
+                        name = if (editing) r.name else duplicateName(r.name, names),
+                        condition = if (editing) r.condition else "",
                         mode = modeOf(r),
                         pingHost = r.pingHost.orEmpty(),
                         samples = r.samplesPerPoint.toString(),
@@ -87,7 +106,8 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
                         cols = r.gridCols.toString(),
                         cell = r.cellSizeM.toString()
                     )
-                    initial = f
+                    // A duplicate is new: leaving it unsaved should still ask first.
+                    initial = if (editing) f else SetupForm()
                     form = f
                 }
                 loaded = true
@@ -109,6 +129,7 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
                 dao.updateRoom(
                     existing.copy(
                         name = f.name.trim(),
+                        condition = f.condition.trim(),
                         mode = f.mode.name,
                         samplesPerPoint = f.samplesValue!!,
                         pingHost = f.pingHost.trim().ifBlank { null }
@@ -130,6 +151,7 @@ class SetupViewModel(app: Application, saved: SavedStateHandle) : AndroidViewMod
         val id = dao.insertRoom(
             SurveyRoom(
                 name = f.name.trim(),
+                condition = f.condition.trim(),
                 mode = f.mode.name,
                 samplesPerPoint = f.samplesValue!!,
                 pingHost = f.pingHost.trim().ifBlank { null },

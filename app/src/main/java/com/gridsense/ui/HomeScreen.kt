@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GridOn
@@ -56,6 +57,7 @@ fun HomeScreen(
     vm: SurveyViewModel,
     onNew: () -> Unit,
     onOpen: (Long) -> Unit,
+    onDuplicate: (Long) -> Unit,
     onPermissions: () -> Unit
 ) {
     val rooms by vm.rooms.collectAsStateWithLifecycle()
@@ -100,6 +102,7 @@ fun HomeScreen(
                         room = room,
                         summary = summaries[room.id],
                         onOpen = { onOpen(room.id) },
+                        onDuplicate = { onDuplicate(room.id) },
                         onExportCsv = { scope.launch { share(context, vm.exportCsv(room.id), "text/csv") } },
                         onExportJson = {
                             scope.launch { vm.exportJson(room.id)?.let { share(context, listOf(it), "application/json") } }
@@ -133,6 +136,7 @@ private fun SurveyCard(
     room: SurveyRoom,
     summary: SurveySummary?,
     onOpen: () -> Unit,
+    onDuplicate: () -> Unit,
     onExportCsv: () -> Unit,
     onExportJson: () -> Unit,
     onDelete: () -> Unit
@@ -150,6 +154,9 @@ private fun SurveyCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f).padding(top = Spacing.l)) {
                     Text(room.name, style = MaterialTheme.typography.titleMedium)
+                    if (room.condition.isNotBlank()) {
+                        Text(room.condition, style = MaterialTheme.typography.bodyMedium)
+                    }
                     Text(
                         modeOf(room).label + " · " + room.gridRows + " x " + room.gridCols + " grid · " +
                             DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(room.createdAt)),
@@ -162,6 +169,10 @@ private fun SurveyCard(
                         Icon(Icons.Filled.MoreVert, contentDescription = "Options for " + room.name)
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        MenuItem("Duplicate", Icons.Filled.ContentCopy) {
+                            menu = false
+                            onDuplicate()
+                        }
                         MenuItem("Export CSV", Icons.Filled.TableChart) {
                             menu = false
                             onExportCsv()

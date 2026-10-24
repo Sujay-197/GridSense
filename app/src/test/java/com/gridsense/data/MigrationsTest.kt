@@ -90,4 +90,10 @@ class MigrationsTest {
         assertEquals(true, router["heightDiffM"])
         assertTrue(schema(7)!!.contains("\"defaultValue\": \"0\""))
     }
+
+    @Test
+    fun sevenToEightAddsTheConditionWithADefault() {
+        assertEquals(true, columns(schema(8)!!).getValue("survey_room")["condition"])
+        assertTrue(MIGRATION_7_8.statements.single().endsWith("DEFAULT ''"))
+    }
 }
