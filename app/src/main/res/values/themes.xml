@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.GridSense" parent="@android:style/Theme.Material.Light.NoActionBar" />
+    <!-- Follows the system light or dark setting; Compose draws everything, edge to edge. -->
+    <style name="Theme.GridSense" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>

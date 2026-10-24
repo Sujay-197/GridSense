@@ -77,3 +77,25 @@ fun qualityLevel(metric: Metric, value: Double): QualityLevel {
     }
     return (hit ?: scale.last()).level
 }
+
+private fun plain(value: Double): String =
+    if (value == Math.rint(value)) value.toLong().toString() else value.toString()
+
+/**
+ * Legend text for each band of a fixed scale, best first: "≥ -50", "-60 to -50", "< -80" for
+ * a higher-is-better metric, "≤ 20", "20 to 50", "> 50" for a lower-is-better one.
+ */
+fun bandLabels(metric: Metric): List<Pair<QualityLevel, String>> {
+    val scale = qualityBands(metric)
+    return scale.mapIndexed { i, band ->
+        val previous = scale.getOrNull(i - 1)?.limit
+        val text = when {
+            previous == null && metric.higherIsBetter -> "≥ " + plain(band.limit)
+            previous == null -> "≤ " + plain(band.limit)
+            band.limit.isInfinite() -> (if (metric.higherIsBetter) "< " else "> ") + plain(previous)
+            metric.higherIsBetter -> plain(band.limit) + " to " + plain(previous)
+            else -> plain(previous) + " to " + plain(band.limit)
+        }
+        band.level to text
+    }
+}

@@ -61,4 +61,25 @@ class QualityTest {
     fun titleCapitalisesTheWord() {
         assertEquals("Very good", QualityLevel.VERY_GOOD.title)
     }
+
+    @Test
+    fun bandLabelsForHigherIsBetter() {
+        val labels = bandLabels(Metric.RSSI)
+        assertEquals(QualityLevel.EXCELLENT to "≥ -50", labels.first())
+        assertEquals(QualityLevel.VERY_GOOD to "-60 to -50", labels[1])
+        assertEquals(QualityLevel.POOR to "< -80", labels.last())
+    }
+
+    @Test
+    fun bandLabelsForLowerIsBetter() {
+        val labels = bandLabels(Metric.LATENCY)
+        assertEquals(
+            listOf(
+                QualityLevel.GOOD to "≤ 20",
+                QualityLevel.FAIR to "20 to 50",
+                QualityLevel.POOR to "> 50"
+            ),
+            labels
+        )
+    }
 }
