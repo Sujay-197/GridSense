@@ -44,8 +44,15 @@ private fun sectionIcon(title: String): ImageVector = when (title) {
 
 /** Plain-language findings for the survey, worked out from the logged samples. */
 @Composable
-fun ReportPane(points: List<GridPoint>, samples: List<Sample>, routers: List<Router>) {
-    val sections = remember(points, samples, routers) { buildInsights(points, samples, routers) }
+fun ReportPane(
+    points: List<GridPoint>,
+    samples: List<Sample>,
+    routers: List<Router>,
+    loadTestEnabled: Boolean? = null
+) {
+    val sections = remember(points, samples, routers, loadTestEnabled) {
+        buildInsights(points, samples, routers, loadTestEnabled)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

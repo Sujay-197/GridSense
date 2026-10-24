@@ -29,6 +29,10 @@ const val WIFI_STREAMING_DBM = -67.0
  */
 const val UNIFORM_SPREAD_DB = 6.0
 
+/** 5 GHz DFS channels 52 to 144 cover roughly 5250 to 5730 MHz. */
+const val DFS_LOW_MHZ = 5250.0
+const val DFS_HIGH_MHZ = 5730.0
+
 /** A difference between opposite edges of the grid big enough to point at the router. */
 const val GRADIENT_DB = 4.0
 
@@ -81,7 +85,8 @@ private fun joinLabels(points: List<GridPoint>) = points.joinToString(", ") { la
 fun buildInsights(
     points: List<GridPoint>,
     samples: List<Sample>,
-    routers: List<Router> = emptyList()
+    routers: List<Router> = emptyList(),
+    loadTestEnabled: Boolean? = null
 ): List<InsightSection> {
     val active = points.filter { it.enabled }
     val logged = active.filter { it.status == STATUS_DONE }
@@ -96,7 +101,7 @@ fun buildInsights(
     airwaves(logged, byPoint)?.let { sections += it }
     channels(logged, byPoint)?.let { sections += it }
     cellular(logged, byPoint)?.let { sections += it }
-    latency(logged, byPoint)?.let { sections += it }
+    latency(logged, byPoint, loadTestEnabled)?.let { sections += it }
     dataQuality(logged, byPoint)?.let { sections += it }
     return sections
 }
@@ -164,10 +169,10 @@ private fun wifiCoverage(logged: List<GridPoint>, byPoint: Map<Long, List<Sample
     val spread = best.value - worst.value
     val noise = median(readings.values.map { stdev(it) })
     if (spread <= UNIFORM_SPREAD_DB) {
-        lines += "The node-to-node spread is only ${num(spread)} dB. Readings at a single spot " +
-            "already vary by about ±${num(noise)} dB from how the phone is held, your body and " +
-            "reflections, so treat the room as uniformly covered rather than reading much into " +
-            "the heatmap colours."
+        lines += "The node-to-node spread is only ${num(spread)} dB, which is within how much a " +
+            "repeat survey of the same spot typically moves (a few dB, from how the phone is held, " +
+            "your body and reflections), so treat the room as uniformly covered rather than reading " +
+            "much into the heatmap colours."
     } else {
         lines += "The node-to-node spread is ${num(spread)} dB. Readings at one spot only varied " +
             "by about ±${num(noise)} dB while logging, but a repeat survey can move a node by " +
@@ -439,7 +444,25 @@ private fun channels(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
                 "Channel ${own5.channel} is already among the least occupied 5 GHz channels."
             }
         } else {
-            lines += "The least occupied 5 GHz channel here is ${a.best.channel}."
+            val ownRadio = report.networks.firstOrNull { it.own && it.band5 }
+            val others5 = report.networks.filter { !it.own && it.band5 }
+            lines += when {
+                ownRadio != null && others5.isEmpty() ->
+                    "Your router's 5 GHz radio is on channel ${ownRadio.channel} (${ownRadio.widthMhz} " +
+                        "MHz) and no other 5 GHz networks were heard, so that band is clear."
+                ownRadio != null ->
+                    "Your router's 5 GHz radio is on channel ${ownRadio.channel} (${ownRadio.widthMhz} " +
+                        "MHz); the least occupied 5 GHz channel here is ${a.best.channel}."
+                else -> "The least occupied 5 GHz channel here is ${a.best.channel}."
+            }
+            if (ownRadio != null && ownRadio.channel != null && !isDfs(ownRadio.channel) &&
+                ownRadio.centerMhz + ownRadio.widthMhz / 2.0 > DFS_LOW_MHZ &&
+                ownRadio.centerMhz - ownRadio.widthMhz / 2.0 < DFS_HIGH_MHZ
+            ) {
+                lines += "Its ${ownRadio.widthMhz} MHz block reaches into the DFS channels (52 to 144), " +
+                    "so radar detection can force the router to change channel, briefly dropping " +
+                    "5 GHz clients."
+            }
         }
         val dfs = listOfNotNull(own5?.channel, a.best.channel).filter { isDfs(it) }.distinct()
         if (dfs.isNotEmpty()) {
@@ -454,7 +477,11 @@ private fun channels(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>):
 
 private fun round1(v: Double) = Math.round(v * 10) / 10.0
 
-private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): InsightSection? {
+private fun latency(
+    logged: List<GridPoint>,
+    byPoint: Map<Long, List<Sample>>,
+    loadTestEnabled: Boolean? = null
+): InsightSection? {
     val pings = logged.associateWith { p -> byPoint[p.id].orEmpty().lastOrNull { it.kind == KIND_PING } }
         .filterValues { it != null }.mapValues { it.value!! }
     if (pings.isEmpty()) return null
@@ -474,18 +501,32 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
                 "block ping; try setting a different ping target, such as 8.8.8.8."
         }
         val ratings = ArrayList<Rating>()
-        beyondPing(logged, byPoint, lines, ratings)
+        beyondPing(logged, byPoint, lines, ratings, loadTestEnabled)
         return InsightSection("Latency, jitter and loss", lines, ratings)
     }
 
     val ratings = ArrayList<Rating>()
-    lines += "Pinged ${hosts.joinToString(", ")}."
+    // Pinging your own router measures one Wi-Fi hop, which should answer in a few ms, so the
+    // internet-latency bands would call a badly delayed first hop "fine".
+    val lan = hosts.isNotEmpty() && hosts.all { isLanAddress(it) }
+    lines += "Pinged ${hosts.joinToString(", ")}" + (if (lan) ", your own router." else ".")
     val lat = answered.mapValues { it.value.rttAvgMs!! }
     val slow = lat.maxByOrNull { it.value }!!
     val latMedian = median(lat.values.toList())
-    ratings += Rating("Median latency", "${num(latMedian)} ms", qualityLevel(Metric.LATENCY, latMedian))
+    ratings += Rating(
+        if (lan) "Median latency to router" else "Median latency",
+        "${num(latMedian)} ms",
+        if (lan) firstHopLatencyLevel(latMedian) else qualityLevel(Metric.LATENCY, latMedian)
+    )
     lines += "Latency median ${num(latMedian)} ms, worst ${num(slow.value)} ms at " +
-        "${labelOf(slow.key)}: " + when {
+        "${labelOf(slow.key)}: " + if (lan) when {
+            latMedian <= FIRST_HOP_GOOD_MS -> "normal for the hop to your own router."
+            latMedian <= FIRST_HOP_FAIR_MS -> "a little slow for the hop to your own router, which " +
+                "usually answers in 1 to 5 ms."
+            else -> "high for the hop to your own router, which usually answers in 1 to 5 ms. A " +
+                "delay this large on the first hop usually comes from the phone's Wi-Fi power " +
+                "saving or a busy router, not from your internet connection."
+        } else when {
             latMedian <= 20 -> "low, fine for anything including gaming and calls."
             latMedian <= 50 -> "moderate, fine for browsing and video."
             else -> "high, noticeable in calls and games."
@@ -493,8 +534,16 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
     val jitter = answered.values.mapNotNull { it.rttJitterMs }
     if (jitter.isNotEmpty()) {
         val j = median(jitter)
-        ratings += Rating("Median jitter", "${num(j)} ms", qualityLevel(Metric.JITTER, j))
-        lines += "Jitter median ${num(j)} ms: " + when {
+        ratings += Rating(
+            "Median jitter", "${num(j)} ms",
+            if (lan) firstHopJitterLevel(j) else qualityLevel(Metric.JITTER, j)
+        )
+        lines += "Jitter median ${num(j)} ms: " + if (lan) when {
+            j <= FIRST_HOP_JITTER_GOOD_MS -> "steady."
+            j <= FIRST_HOP_JITTER_FAIR_MS -> "some variation for a single Wi-Fi hop."
+            else -> "unsteady for a single Wi-Fi hop, where replies should arrive within a few ms " +
+                "of each other."
+        } else when {
             j <= 5 -> "steady."
             j <= 30 -> "some variation, usually fine."
             else -> "unsteady, which hurts calls more than raw latency does."
@@ -511,8 +560,42 @@ private fun latency(logged: List<GridPoint>, byPoint: Map<Long, List<Sample>>): 
         "Packet loss at ${lossy.size} node${if (lossy.size == 1) "" else "s"}: " +
             lossy.entries.joinToString(", ") { "${labelOf(it.key)} ${num(it.value.rttLossPct!!)}%" } + "."
     }
-    beyondPing(logged, byPoint, lines, ratings)
+    beyondPing(logged, byPoint, lines, ratings, loadTestEnabled)
     return InsightSection("Latency, jitter and loss", lines, ratings)
+}
+
+/** Above this the first hop to your own router is slower than it should be. */
+const val FIRST_HOP_GOOD_MS = 5.0
+
+/** Above this the first hop is badly delayed. */
+const val FIRST_HOP_FAIR_MS = 15.0
+
+const val FIRST_HOP_JITTER_GOOD_MS = 2.0
+const val FIRST_HOP_JITTER_FAIR_MS = 10.0
+
+fun firstHopLatencyLevel(ms: Double): QualityLevel = when {
+    ms <= 2.0 -> QualityLevel.EXCELLENT
+    ms <= FIRST_HOP_GOOD_MS -> QualityLevel.GOOD
+    ms <= FIRST_HOP_FAIR_MS -> QualityLevel.FAIR
+    else -> QualityLevel.POOR
+}
+
+fun firstHopJitterLevel(ms: Double): QualityLevel = when {
+    ms <= FIRST_HOP_JITTER_GOOD_MS -> QualityLevel.EXCELLENT
+    ms <= 5.0 -> QualityLevel.GOOD
+    ms <= FIRST_HOP_JITTER_FAIR_MS -> QualityLevel.FAIR
+    else -> QualityLevel.POOR
+}
+
+/** A private IPv4 address (RFC 1918) or IPv6 link-local or unique-local: a host on your own network. */
+fun isLanAddress(host: String): Boolean {
+    val h = host.trim().lowercase()
+    if (h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return ':' in h
+    val parts = h.split('.').map { it.toIntOrNull() ?: return false }
+    if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+    return parts[0] == 10 ||
+        (parts[0] == 172 && parts[1] in 16..31) ||
+        (parts[0] == 192 && parts[1] == 168)
 }
 
 /** DNS, TCP and load-test findings, appended to the latency section. */
@@ -520,7 +603,8 @@ private fun beyondPing(
     logged: List<GridPoint>,
     byPoint: Map<Long, List<Sample>>,
     lines: MutableList<String>,
-    ratings: MutableList<Rating>
+    ratings: MutableList<Rating>,
+    loadTestEnabled: Boolean? = null
 ) {
     val rows = logged.flatMap { byPoint[it.id].orEmpty() }
     val nodes = logged.associateWith { nodeLatency(byPoint[it.id].orEmpty()) }
@@ -560,9 +644,24 @@ private fun beyondPing(
             var line = "TCP connect to $host took a median ${num(round1(m))} ms"
             if (icmp.isNotEmpty()) {
                 val i = median(icmp)
+                val pingRows = rows.filter { it.kind == KIND_PING }
+                val pingJitter = pingRows.mapNotNull { it.rttJitterMs }.takeIf { it.isNotEmpty() }?.let { median(it) }
+                val diff = m - i
                 line += ", against ${num(round1(i))} ms for ping. A handshake costs about one round trip, " +
-                    if (m > i + 5) "so the extra ${num(round1(m - i))} ms is the path beyond the ping target."
-                    else "and the two agree, so the ping target is representative of the wider path."
+                    when {
+                        diff <= 5 -> "and the two agree, so the ping target is representative of the wider path."
+                        pingJitter != null && diff <= pingJitter ->
+                            "but the ${num(round1(diff))} ms difference is within the ping's own jitter of " +
+                                "${num(round1(pingJitter))} ms, so it can't be put down to the path beyond " +
+                                "the ping target."
+                        else -> "so the extra ${num(round1(diff))} ms is the path beyond the ping target."
+                    }
+                val pingToRouter = pingRows.mapNotNull { it.pingHost }.let { h -> h.isNotEmpty() && h.all { isLanAddress(it) } }
+                val tcpHostOnly = host.substringBeforeLast(':')
+                if (pingToRouter && !isLanAddress(tcpHostOnly) && i >= m / 2) {
+                    line += " Most of the round trip to $tcpHostOnly is already spent on the first hop " +
+                        "to your router, so most of the delay is on the Wi-Fi link rather than the internet."
+                }
             } else {
                 line += "."
             }
@@ -573,9 +672,16 @@ private fun beyondPing(
 
     val loaded = nodes.filterValues { it.loadTested }
     if (loaded.isEmpty()) {
-        if (dns.isNotEmpty() || tcp.isNotEmpty()) {
-            lines += "No load test was run (it is off by default to save data, and skipped on mobile " +
-                "data unless confirmed), so bufferbloat and throughput were not measured."
+        if (dns.isNotEmpty() || tcp.isNotEmpty() || loadTestEnabled == true) {
+            lines += when (loadTestEnabled) {
+                true -> "The load test is switched on for this survey, but none of the logged nodes " +
+                    "has a result: they were logged before it was switched on, or it was skipped on " +
+                    "mobile data. Retake a node to measure bufferbloat and throughput."
+                false -> "The load test is off for this survey, so bufferbloat and throughput were " +
+                    "not measured. It can be switched on in Edit details; it downloads data at every node."
+                null -> "No load test was run (it is off by default to save data, and skipped on " +
+                    "mobile data unless confirmed), so bufferbloat and throughput were not measured."
+            }
         }
         return
     }

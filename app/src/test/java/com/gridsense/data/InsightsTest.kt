@@ -158,7 +158,7 @@ class InsightsTest {
     @Test
     fun goodPingResultsAreSummarised() {
         val samples = wifi(List(9) { -55 }) + (1L..9L).map {
-            ping(it, "192.168.1.1", 3.0 + it, 1.0, if (it == 9L) 10.0 else 0.0)
+            ping(it, "8.8.8.8", 3.0 + it, 1.0, if (it == 9L) 10.0 else 0.0)
         }
         val l = text(buildInsights(grid, samples), "Latency, jitter and loss")
         assertTrue(l.contains("Latency median 8 ms, worst 12 ms at C3: low"))
@@ -231,7 +231,8 @@ class InsightsTest {
         assertEquals(com.gridsense.core.QualityLevel.FAIR, cellular["RSRQ"])
         assertEquals(com.gridsense.core.QualityLevel.FAIR, cellular["SINR"])
         val latency = section(s, "Latency, jitter and loss")!!.ratings.associate { it.label to it.level }
-        assertEquals(com.gridsense.core.QualityLevel.GOOD, latency["Median latency"])
+        // 4 ms to your own router is a normal first hop.
+        assertEquals(com.gridsense.core.QualityLevel.GOOD, latency["Median latency to router"])
         assertEquals(com.gridsense.core.QualityLevel.GOOD, latency["Worst loss"])
         assertTrue(section(s, "Overview")!!.ratings.isEmpty())
     }
