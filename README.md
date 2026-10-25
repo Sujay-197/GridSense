@@ -1,8 +1,63 @@
-# GridSense
+<p align="center">
+  <img src="docs/images/logo.png" width="140" alt="GridSense logo">
+</p>
 
-An indoor Wi-Fi and cellular coverage survey app for Android. You split the room into a grid
-of equal cells, stand in the middle of each cell to take a reading, and the app turns the
-readings into a heatmap. No floor plan, GPS or location fix is needed.
+<h1 align="center">GridSense</h1>
+
+<p align="center">
+  Indoor Wi-Fi and cellular coverage surveys on an Android phone.<br>
+  Split the room into a grid, stand at each node, and get a heatmap, a path-loss fit,
+  a channel analysis and a plain-language report.
+</p>
+
+<p align="center">
+  <img src="docs/images/grid.png" width="240" alt="Survey grid with every node logged">
+  <img src="docs/images/heatmap.png" width="240" alt="Wi-Fi signal heatmap of the same room">
+  <img src="docs/images/path-loss.png" width="240" alt="Path-loss fit for the room's router">
+</p>
+
+No floor plan, GPS or location fix is needed: positions come from the grid itself. GridSense
+was built as the course project for Introduction to Computer Networks (22AIE204) at the
+Amrita School of Artificial Intelligence, Coimbatore.
+
+## Features
+
+- **Grid survey.** Any rows × columns layout; nodes you cannot stand on can be disabled, and a
+  survey can be closed and resumed.
+- **Both radios at every node.** Wi-Fi link metrics and the serving cell, polled every 500 ms,
+  plus ping latency, jitter and loss, a neighbour scan, and optional DNS, TCP and load tests.
+  Every raw sample is kept.
+- **Heatmap.** Inverse distance weighting over the room, with relative or fixed quality colours,
+  per-access-point filtering and router markers.
+- **Analysis.** A log-distance [path-loss](#path-loss) fit, [channel congestion](#channels)
+  scoring and [latency beyond ping](#latency-beyond-ping).
+- **Report.** A rule-based [plain-language write-up](#the-report) of what the survey found.
+- **Compare.** Two surveys of the same grid, node by node, for before-and-after tests.
+- **Export.** Heatmap PNG, CSV, JSON and the report as text.
+
+## Quick start
+
+1. Build the debug APK (see [Building](#building)) and install it on a phone running
+   Android 10 or later.
+2. Grant the location permission and switch location services on. Android needs this to reveal
+   Wi-Fi and cell identifiers; the app never takes a location fix ([why](#permissions)).
+3. Create a survey, enter the rows, columns and cell size, then stand at each node and press
+   *Start logging*.
+4. Open the Heatmap, Analysis and Report tabs.
+
+## Project layout
+
+```
+app/src/main/java/com/gridsense/
+  core/     grid geometry, quality bands, metrics, ping parsing
+  net/      Wi-Fi, cellular, ping, scan and DNS/TCP probe readers
+  data/     Room database, migrations, aggregation, path loss, channels, report rules
+  export/   CSV, JSON and PNG export
+  ui/       Compose screens: setup, grid, heatmap, analysis, report, compare
+app/schemas/  exported Room schemas, one per database version
+art/          logo source and the launcher-icon generator
+docs/         design spec for the analysis features and README images
+```
 
 ## How a survey runs
 
@@ -320,3 +375,8 @@ that only adds nullable columns or columns with defaults, so existing surveys su
 upgrade. There is no destructive fallback. A new column needs a version bump, its `ALTER`
 statement and the exported schema; a unit test fails if any of the three is missing or the
 defaults disagree. CSV exports only ever append columns, so existing column positions stay put.
+
+## Team
+
+Sai Mukesh S, Siva Krithick K and Sujay S, Amrita School of Artificial Intelligence,
+Coimbatore. Built for Introduction to Computer Networks (22AIE204).

@@ -1,5 +1,8 @@
 # GridSense: next iteration spec
 
+> **Status:** implemented in pull request #1. Kept as the design record for the analysis
+> features and the UI structure; the [README](../README.md) describes the current behaviour.
+
 Audience: an engineer or coding agent picking this repo up cold. It covers four new analysis
 features and a UI restructure. Read the whole document before starting; the phases at the end
 say what order to build in.
