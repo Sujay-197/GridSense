@@ -380,3 +380,7 @@ defaults disagree. CSV exports only ever append columns, so existing column posi
 
 Sai Mukesh S, Siva Krithick K and Sujay S, Amrita School of Artificial Intelligence,
 Coimbatore. Built for Introduction to Computer Networks (22AIE204).
+
+## License
+
+[MIT](LICENSE).
